@@ -3,6 +3,7 @@ __pycache__/
 .env
 venv/
 .venv/
+.idea
 *.log
 .DS_Store
 *.jpg
