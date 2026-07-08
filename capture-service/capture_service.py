@@ -9,10 +9,10 @@ class CameraCapture:
     def __init__(self):
         self._ip = None
         self._connected = False
-        self._fps = None
+        self._fps = 0.0
         self._temperature = None
-        self._exposure = None
-        self._gain = None
+        self._exposure = 0
+        self._gain = 0.0
 
     def connect(self, ip: str) -> bool:
         try:
