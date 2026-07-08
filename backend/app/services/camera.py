@@ -1,9 +1,12 @@
 from abc import ABC, abstractmethod
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Generator
 
 import zmq
+import cv2
+import numpy as np
 import json
+import time
 
 # Это контракт — что бы ни произошло, ответ всегда такой
 class CameraStatus(BaseModel):
@@ -30,6 +33,11 @@ class CameraService(ABC):
     @abstractmethod
     def disconnect(self) -> bool:
         """Отключиться от камеры"""
+        ...
+
+    @abstractmethod
+    def stream(self) -> Generator[bytes, None, None]:
+        """Бесконечный генератор JPEG-кадров."""
         ...
 
 class MockCamera(CameraService):
@@ -60,6 +68,30 @@ class MockCamera(CameraService):
     def disconnect(self) -> bool:
         self._connected = False
         return True
+
+    def stream(self) -> Generator[bytes, None, None]:
+        import cv2
+        import numpy as np
+
+        frame_id = 0
+        while True:
+            # Синтетический кадр с меняющимся цветом и номером
+            hue = (frame_id * 10) % 180
+            img = np.zeros((480, 640, 3), dtype=np.uint8)
+            img[:, :] = (hue, 200, 200)
+            img = cv2.cvtColor(img, cv2.COLOR_HSV2BGR)
+
+            # Текст с информацией
+            cv2.putText(img, f"Mock Stream | Frame {frame_id}", (30, 240),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+            cv2.putText(img, f"FPS: ~30", (30, 280),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
+
+            _, jpeg = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            yield jpeg.tobytes()
+
+            frame_id += 1
+            time.sleep(0.033)  # ~30 FPS
 
 class ZmqCamera(CameraService):
     """Общается с Capture Service через ZeroMQ REQ/REP"""
@@ -111,3 +143,13 @@ class ZmqCamera(CameraService):
         if self._socket:
             self._socket.close()
         self._context.term()
+
+    def stream(self) -> Generator[bytes, None, None]:
+        while True:
+            try:
+                data = self._send_command("grab")
+                if data.get("image") is not None:
+                    yield data["image"]
+            except zmq.Again:
+                pass
+            time.sleep(0.033)
