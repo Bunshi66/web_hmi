@@ -43,9 +43,5 @@ async def stream_camera(camera: CameraService = Depends(get_camera_service)):
     # TODO Заменить на WebSocket
     return StreamingResponse(
         camera.stream(),
-        media_type="multipart/x-mixed-replace; boundary=frame",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-        }
+        media_type="multipart/x-mixed-replace; boundary=frame"
     )

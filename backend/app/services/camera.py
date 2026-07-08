@@ -70,25 +70,28 @@ class MockCamera(CameraService):
         return True
 
     def stream(self) -> Generator[bytes, None, None]:
+        import cv2
+        import numpy as np
+
         frame_id = 0
         while True:
-            # Синтетический кадр с меняющимся цветом и номером
             hue = (frame_id * 10) % 180
             img = np.zeros((480, 640, 3), dtype=np.uint8)
             img[:, :] = (hue, 200, 200)
             img = cv2.cvtColor(img, cv2.COLOR_HSV2BGR)
 
-            # Текст с информацией
             cv2.putText(img, f"Mock Stream | Frame {frame_id}", (30, 240),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
-            cv2.putText(img, f"FPS: ~30", (30, 280),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
 
             _, jpeg = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 80])
-            yield jpeg.tobytes()
+            frame_data = jpeg.tobytes()
+
+            # MJPEG multipart формат
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_data + b'\r\n')
 
             frame_id += 1
-            time.sleep(0.033)  # ~30 FPS
+            time.sleep(0.033)
 
 class ZmqCamera(CameraService):
     """Общается с Capture Service через ZeroMQ REQ/REP"""
@@ -146,7 +149,9 @@ class ZmqCamera(CameraService):
             try:
                 data = self._send_command("grab")
                 if data.get("image") is not None:
-                    yield data["image"]
+                    frame_data = data["image"]
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame_data + b'\r\n')
             except zmq.Again:
                 pass
             time.sleep(0.033)
