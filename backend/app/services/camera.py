@@ -149,6 +149,8 @@ class ZmqCamera(CameraService):
                 data = self._stream_socket.recv_json()
                 if data.get("image") is not None:
                     img_bytes = base64.b64decode(data["image"])
+                    if isinstance(img_bytes, str):
+                        img_bytes = img_bytes.encode()
                     yield (b'--frame\r\n'
                            b'Content-Type: image/jpeg\r\n\r\n' + img_bytes + b'\r\n')
             except zmq.Again:
