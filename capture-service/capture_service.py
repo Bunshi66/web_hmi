@@ -22,6 +22,7 @@ class CameraCapture:
             self._temperature = 0.0
             self._exposure = 5000
             self._gain = 1.0
+            return True
         except Exception as e:
             logger.error(f"Failed to connect to {ip}: {e}")
             return False
