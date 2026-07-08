@@ -16,6 +16,8 @@ class CameraCapture:
         self._exposure = 0
         self._gain = 0.0
 
+        self._frame_counter = 0
+
     def connect(self, ip: str) -> bool:
         try:
             self._connected = True
@@ -52,14 +54,31 @@ class CameraCapture:
             "gain": self._gain
         }
 
+    # def grab_frame(self) -> dict:
+    #     if not self._connected:
+    #         return {"image": None, "width": 0, "height": 0, "timestamp": 0}
+    #     import numpy as np
+    #     import cv2
+    #     img = np.zeros((480, 640, 3), dtype=np.uint8)
+    #     cv2.putText(img, "Capture Service", (150, 240),
+    #                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+    #     _, jpeg = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 50])
+    #     return {
+    #         "image": base64.b64encode(jpeg.tobytes()).decode("utf-8"),
+    #         "width": 640,
+    #         "height": 480,
+    #         "timestamp": time.time()
+    #     }
+
     def grab_frame(self) -> dict:
         if not self._connected:
             return {"image": None, "width": 0, "height": 0, "timestamp": 0}
         import numpy as np
         import cv2
         img = np.zeros((480, 640, 3), dtype=np.uint8)
-        cv2.putText(img, "Capture Service", (150, 240),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(img, f"Capture Service | Frame {self._frame_counter}", (100, 240),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+        self._frame_counter += 1
         _, jpeg = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 50])
         return {
             "image": base64.b64encode(jpeg.tobytes()).decode("utf-8"),
