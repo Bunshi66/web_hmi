@@ -35,3 +35,33 @@ def test_get_status_disconnected():
     assert data["fps"] == 0.0
 
     app.dependency_overrides.pop(get_camera_service)
+
+
+def test_connect():
+    mock = MockCamera(connected=False)
+    app.dependency_overrides[get_camera_service] = lambda: mock
+
+    response = client.post("/camera/connect", json={"ip": "192.168.1.50"})
+    assert response.status_code == 200
+    assert response.json() == {"success": True}
+
+    # Проверяем, что статус обновился
+    status = client.get("/camera/status").json()
+    assert status["connected"] is True
+    assert status["ip"] == "192.168.1.50"
+
+    app.dependency_overrides.pop(get_camera_service)
+
+
+def test_disconnect():
+    mock = MockCamera(connected=True, ip="192.168.1.50")
+    app.dependency_overrides[get_camera_service] = lambda: mock
+
+    response = client.post("/camera/disconnect")
+    assert response.status_code == 200
+    assert response.json() == {"success": True}
+
+    status = client.get("/camera/status").json()
+    assert status["connected"] is False
+
+    app.dependency_overrides.pop(get_camera_service)
