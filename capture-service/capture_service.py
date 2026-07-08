@@ -2,6 +2,7 @@ import time
 import logging
 import zmq
 import threading
+import base64
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -54,7 +55,6 @@ class CameraCapture:
     def grab_frame(self) -> dict:
         if not self._connected:
             return {"image": None, "width": 0, "height": 0, "timestamp": 0}
-        # Заглушка — чёрный кадр
         import numpy as np
         import cv2
         img = np.zeros((480, 640, 3), dtype=np.uint8)
@@ -62,7 +62,7 @@ class CameraCapture:
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         _, jpeg = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 50])
         return {
-            "image": jpeg.tobytes(),
+            "image": base64.b64encode(jpeg.tobytes()).decode("utf-8"),
             "width": 640,
             "height": 480,
             "timestamp": time.time()

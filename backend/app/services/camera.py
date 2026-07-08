@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from pydantic import BaseModel
 from typing import Optional, Generator
-
+import base64
 import zmq
 import cv2
 import numpy as np
@@ -148,8 +148,9 @@ class ZmqCamera(CameraService):
             try:
                 data = self._stream_socket.recv_json()
                 if data.get("image") is not None:
+                    img_bytes = base64.b64decode(data["image"])
                     yield (b'--frame\r\n'
-                           b'Content-Type: image/jpeg\r\n\r\n' + data["image"] + b'\r\n')
+                           b'Content-Type: image/jpeg\r\n\r\n' + img_bytes + b'\r\n')
             except zmq.Again:
                 pass
             time.sleep(0.033)
