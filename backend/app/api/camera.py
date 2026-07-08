@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Depends
-from app.services.camera import CameraService, CameraStatus
+from app.services.camera import CameraService, CameraStatus, MockCamera, ZmqCamera
+from app.core.config import settings
 
 router = APIRouter(prefix="/camera", tags=["camera"])
 
 
-# Внедрение зависимости: FastAPI сам создаст сервис и передаст сюда
 def get_camera_service() -> CameraService:
-    # Пока всегда возвращаем MockCamera
-    # Позже заменим на ZmqCamera по условию (из конфига)
-    from app.services.camera import MockCamera
+    """Фабрика: возвращает реализацию CameraService в зависимости от конфига."""
+    if settings.camera_mode == "zmq":
+        return ZmqCamera(zmq_address=settings.zmq_camera_address)
     return MockCamera(connected=True)
 
 
