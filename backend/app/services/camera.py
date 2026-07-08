@@ -70,9 +70,6 @@ class MockCamera(CameraService):
         return True
 
     def stream(self) -> Generator[bytes, None, None]:
-        import cv2
-        import numpy as np
-
         frame_id = 0
         while True:
             # Синтетический кадр с меняющимся цветом и номером
