@@ -99,29 +99,33 @@ class ZmqCamera(CameraService):
     def __init__(self, zmq_address: str = "tcp://localhost:5555"):
         self._address = zmq_address
         self._context = zmq.Context()
-        self._socket: zmq.Socket | None = None
+        self._cmd_socket = None  # для команд
+        self._stream_socket = None  # для стриминга
         self._connect_socket()
 
     def _connect_socket(self):
         """Создать и подключить REQ-сокет"""
-        self._socket = self._context.socket(zmq.REQ)
-        self._socket.connect(self._address)
-        # Таймаут 1 секунда — чтобы не виснуть, если сервер не отвечает
-        self._socket.setsockopt(zmq.RCVTIMEO, 1000)
-        self._socket.setsockopt(zmq.SNDTIMEO, 1000)
+        self._cmd_socket = self._context.socket(zmq.REQ)
+        self._cmd_socket.connect(self._address)
+        self._cmd_socket.setsockopt(zmq.RCVTIMEO, 1000)
+        self._cmd_socket.setsockopt(zmq.SNDTIMEO, 1000)
+
+        self._stream_socket = self._context.socket(zmq.REQ)
+        self._stream_socket.connect(self._address)
+        self._stream_socket.setsockopt(zmq.RCVTIMEO, 1000)
+        self._stream_socket.setsockopt(zmq.SNDTIMEO, 1000)
 
     def _send_command(self, command: str, **params) -> dict:
-        """Отправить команду и получить ответ"""
+        """Отправить команду через cmd-сокет"""
         request = {"command": command, **params}
-        self._socket.send_json(request)
-        return self._socket.recv_json()
+        self._cmd_socket.send_json(request)
+        return self._cmd_socket.recv_json()
 
     def get_status(self) -> CameraStatus:
         try:
             data = self._send_command("status")
             return CameraStatus(**data)
         except zmq.Again:
-            # Таймаут — камера не отвечает
             return CameraStatus(connected=False)
 
     def connect(self, ip: str) -> bool:
@@ -138,16 +142,11 @@ class ZmqCamera(CameraService):
         except zmq.Again:
             return False
 
-    def close(self):
-        """Закрыть сокет (вызывать при завершении)"""
-        if self._socket:
-            self._socket.close()
-        self._context.term()
-
     def stream(self) -> Generator[bytes, None, None]:
         while True:
             try:
-                data = self._send_command("grab")
+                self._stream_socket.send_json({"command": "grab"})
+                data = self._stream_socket.recv_json()
                 if data.get("image") is not None:
                     frame_data = data["image"]
                     yield (b'--frame\r\n'
@@ -155,3 +154,10 @@ class ZmqCamera(CameraService):
             except zmq.Again:
                 pass
             time.sleep(0.033)
+
+    def close(self):
+        if self._cmd_socket:
+            self._cmd_socket.close()
+        if self._stream_socket:
+            self._stream_socket.close()
+        self._context.term()
