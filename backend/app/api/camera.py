@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
+
 from app.services.camera import CameraService, CameraStatus, MockCamera, ZmqCamera
 from app.core.config import settings
 from pydantic import BaseModel
@@ -33,3 +35,13 @@ async def disconnect_camera(camera: CameraService = Depends(get_camera_service))
     """Отключиться от камеры"""
     success = camera.disconnect()
     return {"success": success}
+
+
+@router.get("/stream")
+async def stream_camera(camera: CameraService = Depends(get_camera_service)):
+    """MJPEG видеопоток"""
+    # TODO Заменить на WebSocket
+    return StreamingResponse(
+        camera.stream(),
+        media_type="multipart/x-mixed-replace; boundary=frame"
+    )
