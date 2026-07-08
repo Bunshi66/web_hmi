@@ -97,23 +97,24 @@ class ZmqCamera(CameraService):
     """Общается с Capture Service через ZeroMQ REQ/REP"""
 
     def __init__(self, zmq_address: str = "tcp://localhost:5555"):
-        self._address = zmq_address
+        self._cmd_address = zmq_address  # порт 5555
+        self._stream_address = zmq_address.replace("5555", "5556")  # порт 5556
         self._context = zmq.Context()
-        self._cmd_socket = None  # для команд
-        self._stream_socket = None  # для стриминга
-        self._connect_socket()
+        self._cmd_socket = None
+        self._stream_socket = None
+        self._connect_sockets()
 
-    def _connect_socket(self):
-        """Создать и подключить REQ-сокет"""
+    def _connect_sockets(self):
         self._cmd_socket = self._context.socket(zmq.REQ)
-        self._cmd_socket.connect(self._address)
+        self._cmd_socket.connect(self._cmd_address)
         self._cmd_socket.setsockopt(zmq.RCVTIMEO, 1000)
         self._cmd_socket.setsockopt(zmq.SNDTIMEO, 1000)
 
-        self._stream_socket = self._context.socket(zmq.REQ)
-        self._stream_socket.connect(self._address)
+        # SUB сокет для стриминга
+        self._stream_socket = self._context.socket(zmq.SUB)
+        self._stream_socket.connect(self._stream_address)
+        self._stream_socket.setsockopt_string(zmq.SUBSCRIBE, "")  # подписываемся на всё
         self._stream_socket.setsockopt(zmq.RCVTIMEO, 1000)
-        self._stream_socket.setsockopt(zmq.SNDTIMEO, 1000)
 
     def _send_command(self, command: str, **params) -> dict:
         """Отправить команду через cmd-сокет"""
@@ -145,12 +146,10 @@ class ZmqCamera(CameraService):
     def stream(self) -> Generator[bytes, None, None]:
         while True:
             try:
-                self._stream_socket.send_json({"command": "grab"})
                 data = self._stream_socket.recv_json()
                 if data.get("image") is not None:
-                    frame_data = data["image"]
                     yield (b'--frame\r\n'
-                           b'Content-Type: image/jpeg\r\n\r\n' + frame_data + b'\r\n')
+                           b'Content-Type: image/jpeg\r\n\r\n' + data["image"] + b'\r\n')
             except zmq.Again:
                 pass
             time.sleep(0.033)

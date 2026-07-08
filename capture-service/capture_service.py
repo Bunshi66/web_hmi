@@ -1,6 +1,7 @@
 import time
 import logging
 import zmq
+import threading
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -52,11 +53,18 @@ class CameraCapture:
 
     def grab_frame(self) -> dict:
         if not self._connected:
-            return {"image": None, "width": 0, "height": 0, "timestamp": 0, "error": "Not connected"}
+            return {"image": None, "width": 0, "height": 0, "timestamp": 0}
+        # Заглушка — чёрный кадр
+        import numpy as np
+        import cv2
+        img = np.zeros((480, 640, 3), dtype=np.uint8)
+        cv2.putText(img, "Capture Service", (150, 240),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        _, jpeg = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 50])
         return {
-            "image": None,
-            "width": 1920,
-            "height": 1080,
+            "image": jpeg.tobytes(),
+            "width": 640,
+            "height": 480,
             "timestamp": time.time()
         }
 
@@ -66,13 +74,31 @@ class CameraCapture:
 def main():
     camera = CameraCapture()
     context = zmq.Context()
-    socket = context.socket(zmq.REP)
-    socket.bind("tcp://*:5555")
-    logger.info("Capture Service started on tcp://*:5555")
+
+    # REP сокет для команд
+    cmd_socket = context.socket(zmq.REP)
+    cmd_socket.bind("tcp://*:5555")
+    logger.info("Command socket on tcp://*:5555")
+
+    # PUB сокет для стриминга
+    pub_socket = context.socket(zmq.PUB)
+    pub_socket.bind("tcp://*:5556")
+    logger.info("Stream socket on tcp://*:5556")
+
+    def stream_loop():
+        """Фоновый поток: шлёт кадры в PUB сокет"""
+        while True:
+            if camera._connected:
+                frame = camera.grab_frame()
+                pub_socket.send_json(frame)
+            time.sleep(0.033)
+
+    thread = threading.Thread(target=stream_loop, daemon=True)
+    thread.start()
 
     try:
         while True:
-            request = socket.recv_json()
+            request = cmd_socket.recv_json()
             command = request.get("command")
             logger.info(f"Received command: {command}")
 
@@ -85,17 +111,16 @@ def main():
             elif command == "disconnect":
                 success = camera.disconnect()
                 response = {"success": success}
-            elif command == "grab":
-                response = camera.grab_frame()
             else:
                 response = {"success": False, "error": f"Unknown command: {command}"}
 
-            socket.send_json(response)
+            cmd_socket.send_json(response)
     except KeyboardInterrupt:
         logger.info("Shutting down...")
     finally:
         camera.release()
-        socket.close()
+        cmd_socket.close()
+        pub_socket.close()
         context.term()
         logger.info("Capture Service stopped")
 
