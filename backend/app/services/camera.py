@@ -159,8 +159,10 @@ class ZmqCamera(CameraService):
             time.sleep(0.033)
 
     def close(self):
-        if self._cmd_socket:
+        """Закрыть все сокеты и контекст."""
+        if hasattr(self, '_cmd_socket') and self._cmd_socket:
             self._cmd_socket.close()
-        if self._stream_socket:
+        if hasattr(self, '_stream_socket') and self._stream_socket:
             self._stream_socket.close()
-        self._context.term()
+        if hasattr(self, '_context') and self._context:
+            self._context.term()
