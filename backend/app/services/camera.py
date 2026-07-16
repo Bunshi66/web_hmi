@@ -116,11 +116,23 @@ class ZmqCamera(CameraService):
         self._stream_socket.setsockopt_string(zmq.SUBSCRIBE, "")  # подписываемся на всё
         self._stream_socket.setsockopt(zmq.RCVTIMEO, 1000)
 
+    def _reset_cmd_socket(self):
+        """Пересоздать командный сокет после ошибки."""
+        if self._cmd_socket:
+            self._cmd_socket.close()
+        self._cmd_socket = self._context.socket(zmq.REQ)
+        self._cmd_socket.connect(self._cmd_address)
+        self._cmd_socket.setsockopt(zmq.RCVTIMEO, 1000)
+        self._cmd_socket.setsockopt(zmq.SNDTIMEO, 1000)
+
     def _send_command(self, command: str, **params) -> dict:
-        """Отправить команду через cmd-сокет"""
         request = {"command": command, **params}
-        self._cmd_socket.send_json(request)
-        return self._cmd_socket.recv_json()
+        try:
+            self._cmd_socket.send_json(request)
+            return self._cmd_socket.recv_json()
+        except zmq.Again:
+            self._reset_cmd_socket()
+            return {"success": False, "error": "timeout"}
 
     def get_status(self) -> CameraStatus:
         try:
