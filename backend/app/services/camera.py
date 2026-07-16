@@ -137,6 +137,8 @@ class ZmqCamera(CameraService):
     def get_status(self) -> CameraStatus:
         try:
             data = self._send_command("status")
+            if not data.get("connected", False) and not data.get("success", True):
+                return CameraStatus(connected=False)
             return CameraStatus(**data)
         except zmq.Again:
             return CameraStatus(connected=False)
