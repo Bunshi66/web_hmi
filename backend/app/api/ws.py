@@ -7,96 +7,111 @@ from app.api.camera import get_camera_service
 from app.core.database import get_db
 from app.models.models import Event
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Dict, Set
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter()
+# Tracks active connections by type (video, telemetry)
+subscriptions: Dict[str, Set] = {}
 
 @router.websocket("/camera/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    camera = get_camera_service()
+    
+    # Initialize connection tracking for this client
+    subscriptions["video"] = set()
+    subscriptions["telemetry"] = set()
+    subscriptions["events"] = set()
     
     async with get_db() as db:
         try:
-            # Log connection
-            event = Event(event_type="connection", message="Client connected to WebSocket")
+            event = Event(event_type="connection", message=f"Client connected from {websocket.client}")
             db.add(event)
             await db.commit()
             
-            # Dictionary to track subscription types
-            # Default: all types are active
-            subscriptions = {"video": True, "telemetry": True, "events": True}
+            # Send initial state and capabilities to the client
+            init_msg = json.dumps({
+                "action": "init",
+                "capabilities": ["video", "telemetry", "events"],
+                "subscriptions": list(subscriptions.keys())
+            })
+            await websocket.send_json(init_msg)
             
-            # Task for pushing video and telemetry frames
+            # Create a queue to buffer frames in case of backpressure
+            frame_queue = asyncio.Queue()
+            telemetry_queue = asyncio.Queue()
+            
             async def push_frames():
-                while True:
-                    # This is a simplification. In a production environment,
-                    # we'd want a more robust way to handle multiple subscribers
-                    # and different frame types.
-                    try:
-                        # We can't easily use camera.stream() directly because it's a blocking generator
-                        # In a real ZMQ setup, we'd have a dedicated background task reading from the SUB socket.
-                        # For now, we'll simulate the push.
-                        
-                        # To properly implement this, we'd need to modify CameraService 
-                        # to provide an async iterator or use a queue.
-                        # Given the current constraints, let's just acknowledge the requirement.
-                        await asyncio.sleep(0.1)
-                    except Exception as e:
-                        logger.error(f"Error in push_frames: {e}")
-                        break
-
-            # Start the background task for pushing frames
-            # Note: Since CameraService.stream() is blocking, we need to be careful.
-            # We'll stick to handling incoming messages for now and implement a proper
-            # push loop that doesn't block the main websocket loop.
+                camera = get_camera_service()
+                try:
+                    for frame in camera.stream():
+                        # Deserialize the MJPEG multipart frame from bytes to JSON structure
+                        payload = {
+                            "action": "video",
+                            "frame": base64.b64encode(frame).decode('utf-8'),
+                            "timestamp": asyncio.get_event_loop().time()
+                        }
+                        await frame_queue.put(payload)
+                except Exception as e:
+                    logger.error(f"Frame push error: {e}")
             
-            async for message in websocket.iter_json():
-                data = message
-                action = data.get("action")
+            async def send_frames():
+                while True:
+                    try:
+                        payload = await asyncio.wait_for(frame_queue.get(), timeout=5.0)
+                        if "video" in subscriptions and len(subscriptions["video"]) > 0:
+                            # Broadcast to all subscribed clients (simplified for demo)
+                            conn = await websocket.receive_text()  # Placeholder - would use actual client store
+                    except asyncio.TimeoutError:
+                        continue
+                    except Exception as e:
+                        logger.error(f"Send error: {e}")
+                        break
+            
+                    try:
+                        telemetry = {"action": "telemetry", "temperature": get_camera().get_status()}
+                        await telemetry_queue.put(telemetry)
+                    except Exception as e:
+                        logger.error(f"Telemetry capture failed: {e}")
+                    
+            push_task = asyncio.create_task(push_frames())
+            send_task = asyncio.create_task(send_frames())
+            
+            try:
+                while True:
+                    data = await websocket.receive_text()
+                    message = json.loads(data)
+                    action = message.get("action")
+                    
+                    if action == "subscribe":
+                        types = message.get("types", [])
+                        for t in types:
+                            subscriptions[t].add(websocket)
+                        await websocket.send_json({
+                            "action": "subscribed",
+                            "active": list(subscriptions.keys())
+                        })
+                    elif action == "unsubscribe":
+                        types = message.get("types", [])
+                        for t in types:
+                            subscriptions[t].discard(websocket)
+                    
+            except WebSocketDisconnect:
+                logger.info("Client disconnected")
                 
-                if action == "connect":
-                    # Handle connection logic
+            finally:
+                push_task.cancel()
+                send_task.cancel()
+                try:
+                    await push_task
+                except asyncio.CancelledError:
                     pass
-                elif action == "disconnect":
-                    break
-                elif action == "set_parameter":
-                    param = data.get("parameter")
-                    value = data.get("value")
-                    if hasattr(camera, 'set_parameter'):
-                        camera.set_parameter(param, value)
-                elif action == "subscribe":
-                    # Example: {"action": "subscribe", "types": ["video", "telemetry"]}
-                    types = data.get("types", [])
-                    for t in types:
-                        subscriptions[t] = True
-                elif action == "unsubscribe":
-                    # Example: {"action": "unsubscribe", "types": ["video"]}
-                    types = data.get("types", [])
-                    for t in types:
-                        subscriptions[t] = False
-
+                try:
+                    await send_task
+                except asyncio.CancelledError:
+                    pass
+                    
         except WebSocketDisconnect:
-            event = Event(event_type="disconnection", message="Client disconnected from WebSocket")
+            event = Event(event_type="disconnection", message=f"Client {websocket.client} disconnected")
             db.add(event)
             await db.commit()
-        except Exception as e:
-            logger.error(f"WebSocket error: {e}")
-        finally:
-            try:
-                await websocket.close()
-            except:
-                pass
-</write_to_file>
-<task_progress>
-- [ ] Create feature branch (Skipped: Not a git repo)
-- [x] Update requirements.txt
-- [x] Setup Database (models and core)
-- [ ] Implement WebSocket backend
-- [ ] Create Detector stub
-- [ ] Develop Frontend
-- [ ] Write and run tests
-- [ ] Final verification and summary
-</task_progress>
-</write_to_file>

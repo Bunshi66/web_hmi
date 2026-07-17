@@ -6,3 +6,6 @@ pyzmq==26.2.0
 pydantic==2.10.4
 pydantic-settings==2.7.1
 opencv-python-headless==4.10.0.84
+sqlalchemy
+aiosqlite
+aiofiles
