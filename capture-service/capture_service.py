@@ -21,14 +21,25 @@ class CameraCapture:
 
     def connect(self, ip: str) -> bool:
         try:
-            # 0 — дефолтная вебкамера ноутбука
-            self._cap = cv2.VideoCapture(0)
-            if not self._cap.isOpened():
-                logger.error("Не удалось открыть веб-камеру (index 0). Включаем режим заглушки (Mock).")
-                self._cap = None
+            import sys
+            self._cap = None
+            self._mock_mode = False
+
+            # Перебираем индексы с 0 по 4, чтобы найти реальную камеру
+            for idx in range(5):
+                if sys.platform == 'win32':
+                    cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+                else:
+                    cap = cv2.VideoCapture(idx)
+
+                if cap.isOpened():
+                    self._cap = cap
+                    logger.info(f"Успешно открыта физическая камера (index {idx})")
+                    break
+
+            if self._cap is None:
+                logger.error("Не удалось открыть физическую веб-камеру. Включаем режим заглушки (Mock).")
                 self._mock_mode = True
-            else:
-                self._mock_mode = False
 
             self._connected = True
             self._ip = ip
