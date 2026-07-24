@@ -24,17 +24,22 @@ class CameraCapture:
             # 0 — дефолтная вебкамера ноутбука
             self._cap = cv2.VideoCapture(0)
             if not self._cap.isOpened():
-                logger.error("Не удалось открыть веб-камеру (index 0)")
-                return False
+                logger.error("Не удалось открыть веб-камеру (index 0). Включаем режим заглушки (Mock).")
+                self._cap = None
+                self._mock_mode = True
+            else:
+                self._mock_mode = False
 
             self._connected = True
             self._ip = ip
-            self._fps = self._cap.get(cv2.CAP_PROP_FPS) or 30.0
+            self._fps = 30.0 if getattr(self, '_mock_mode', False) else (self._cap.get(cv2.CAP_PROP_FPS) or 30.0)
             self._temperature = 42.0  # Фейковая температура для телеметрии
-            self._exposure = int(self._cap.get(cv2.CAP_PROP_EXPOSURE))
+            self._exposure = 5000 if getattr(self, '_mock_mode', False) else int(self._cap.get(cv2.CAP_PROP_EXPOSURE))
             self._gain = 1.0
+            self._frame_id = 0
 
-            logger.info(f"Connected to local webcam (requested ip: {ip})")
+            cam_type = "mock camera" if getattr(self, '_mock_mode', False) else "local webcam"
+            logger.info(f"Connected to {cam_type} (requested ip: {ip})")
             return True
         except Exception as e:
             logger.error(f"Failed to connect to webcam: {e}")
@@ -67,8 +72,28 @@ class CameraCapture:
         }
 
     def grab_frame(self) -> dict:
-        if not self._connected or self._cap is None:
+        if not self._connected:
             return {"image": None, "width": 0, "height": 0, "timestamp": 0}
+
+        if getattr(self, '_mock_mode', False):
+            import numpy as np
+            hue = (self._frame_id * 10) % 180
+            img = np.zeros((480, 640, 3), dtype=np.uint8)
+            img[:, :] = (hue, 200, 200)
+            img = cv2.cvtColor(img, cv2.COLOR_HSV2BGR)
+            cv2.putText(img, f"Mock Stream | Frame {self._frame_id}", (30, 240),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+            self._frame_id += 1
+            _, jpeg = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            return {
+                "image": base64.b64encode(jpeg.tobytes()).decode("utf-8"),
+                "width": 640,
+                "height": 480,
+                "timestamp": time.time()
+            }
+
+        if self._cap is None:
+             return {"image": None, "width": 0, "height": 0, "timestamp": time.time()}
 
         ret, frame = self._cap.read()
         if not ret or frame is None:
