@@ -8,8 +8,8 @@ services:
     volumes:
       - ./backend:/app
     environment:
-      # Для тестирования используем заглушку (MockCamera)
-      - CAMERA_MODE=mock
+      # Для тестирования используем захват вебкамеры из Windows по ZMQ
+      - CAMERA_MODE=zmq
       # Когда запустишь capture-service на Windows, поменяй CAMERA_MODE=zmq
       # host.docker.internal позволяет из Docker (WSL) достучаться до хостовой Windows
       - ZMQ_CAMERA_ADDRESS=tcp://host.docker.internal:5555

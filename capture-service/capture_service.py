@@ -4,14 +4,14 @@ import zmq
 import threading
 import base64
 import cv2
-from camera_sdk import HikrobotCamera
+# from camera_sdk import HikrobotCamera
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class CameraCapture:
     def __init__(self):
-        self._sdk = HikrobotCamera()
+        self._cap = None
         self._ip = None
         self._connected = False
         self._fps = 0.0
@@ -19,32 +19,32 @@ class CameraCapture:
         self._exposure = 0
         self._gain = 0.0
 
-        self._frame_counter = 0
-
     def connect(self, ip: str) -> bool:
         try:
-            if not self._sdk.connect():
-                return False
-            if not self._sdk.start_grabbing():
-                self._sdk.release()
+            # 0 — дефолтная вебкамера ноутбука
+            self._cap = cv2.VideoCapture(0)
+            if not self._cap.isOpened():
+                logger.error("Не удалось открыть веб-камеру (index 0)")
                 return False
 
             self._connected = True
             self._ip = ip
-            self._fps = 30.0
-            self._temperature = 0.0
-            self._exposure = 5000
+            self._fps = self._cap.get(cv2.CAP_PROP_FPS) or 30.0
+            self._temperature = 42.0  # Фейковая температура для телеметрии
+            self._exposure = int(self._cap.get(cv2.CAP_PROP_EXPOSURE))
             self._gain = 1.0
 
-            logger.info(f"Connected to {ip}")
+            logger.info(f"Connected to local webcam (requested ip: {ip})")
             return True
         except Exception as e:
-            logger.error(f"Failed to connect to {ip}: {e}")
+            logger.error(f"Failed to connect to webcam: {e}")
             return False
 
     def disconnect(self) -> bool:
         try:
-            self._sdk.release()
+            if self._cap:
+                self._cap.release()
+                self._cap = None
             self._connected = False
             self._ip = None
             self._fps = 0.0
@@ -67,11 +67,11 @@ class CameraCapture:
         }
 
     def grab_frame(self) -> dict:
-        if not self._connected:
+        if not self._connected or self._cap is None:
             return {"image": None, "width": 0, "height": 0, "timestamp": 0}
 
-        frame = self._sdk.get_frame(timeout_ms=500)
-        if frame is None:
+        ret, frame = self._cap.read()
+        if not ret or frame is None:
             return {"image": None, "width": 0, "height": 0, "timestamp": time.time()}
 
         # BGR → JPEG → base64
