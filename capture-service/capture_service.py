@@ -29,6 +29,8 @@ class CameraCapture:
             for idx in range(5):
                 if sys.platform == 'win32':
                     cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+                    if not cap.isOpened():
+                        cap = cv2.VideoCapture(idx)
                 else:
                     cap = cv2.VideoCapture(idx)
 
