@@ -37,7 +37,12 @@ class CameraService(ABC):
 
     @abstractmethod
     def stream(self) -> Generator[bytes, None, None]:
-        """Бесконечный генератор JPEG-кадров."""
+        """Бесконечный генератор JPEG-кадров (MJPEG)."""
+        ...
+
+    @abstractmethod
+    def stream_raw(self) -> Generator[bytes, None, None]:
+        """Бесконечный генератор сырых JPEG-кадров для WebSocket."""
         ...
 
 class MockCamera(CameraService):
@@ -69,7 +74,7 @@ class MockCamera(CameraService):
         self._connected = False
         return True
 
-    def stream(self) -> Generator[bytes, None, None]:
+    def stream_raw(self) -> Generator[bytes, None, None]:
         import cv2
         import numpy as np
 
@@ -86,12 +91,15 @@ class MockCamera(CameraService):
             _, jpeg = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 80])
             frame_data = jpeg.tobytes()
 
-            # MJPEG multipart формат
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame_data + b'\r\n')
+            yield frame_data
 
             frame_id += 1
             time.sleep(0.033)
+
+    def stream(self) -> Generator[bytes, None, None]:
+        for frame_data in self.stream_raw():
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_data + b'\r\n')
 
 class ZmqCamera(CameraService):
     """Общается с Capture Service через ZeroMQ REQ/REP"""
@@ -157,7 +165,7 @@ class ZmqCamera(CameraService):
         except zmq.Again:
             return False
 
-    def stream(self) -> Generator[bytes, None, None]:
+    def stream_raw(self) -> Generator[bytes, None, None]:
         while True:
             try:
                 data = self._stream_socket.recv_json()
@@ -166,11 +174,15 @@ class ZmqCamera(CameraService):
                     img_bytes = base64.b64decode(data["image"])
                     if isinstance(img_bytes, str):
                         img_bytes = img_bytes.encode()
-                    yield (b'--frame\r\n'
-                           b'Content-Type: image/jpeg\r\n\r\n' + img_bytes + b'\r\n')
+                    yield img_bytes
             except zmq.Again:
                 pass
             time.sleep(0.033)
+
+    def stream(self) -> Generator[bytes, None, None]:
+        for img_bytes in self.stream_raw():
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + img_bytes + b'\r\n')
 
     def close(self):
         """Закрыть все сокеты и контекст."""

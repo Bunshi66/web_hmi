@@ -7,4 +7,10 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+    environment:
+      # Для тестирования используем заглушку (MockCamera)
+      - CAMERA_MODE=mock
+      # Когда запустишь capture-service на Windows, поменяй CAMERA_MODE=zmq
+      # host.docker.internal позволяет из Docker (WSL) достучаться до хостовой Windows
+      - ZMQ_CAMERA_ADDRESS=tcp://host.docker.internal:5555
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
