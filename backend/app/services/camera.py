@@ -1,12 +1,14 @@
 from abc import ABC, abstractmethod
 from pydantic import BaseModel
-from typing import Optional, Generator
+from typing import Optional, AsyncGenerator
 import base64
 import zmq
+import zmq.asyncio
 import cv2
 import numpy as np
 import json
 import time
+import asyncio
 
 # Это контракт — что бы ни произошло, ответ всегда такой
 class CameraStatus(BaseModel):
@@ -21,27 +23,27 @@ class CameraStatus(BaseModel):
 # Абстракция: любой сервис камеры должен уметь это
 class CameraService(ABC):
     @abstractmethod
-    def get_status(self) -> CameraStatus:
+    async def get_status(self) -> CameraStatus:
         """Получить текущий статус камеры"""
         ...
 
     @abstractmethod
-    def connect(self, ip: str) -> bool:
+    async def connect(self, ip: str) -> bool:
         """Подключиться к камере по IP"""
         ...
 
     @abstractmethod
-    def disconnect(self) -> bool:
+    async def disconnect(self) -> bool:
         """Отключиться от камеры"""
         ...
 
     @abstractmethod
-    def stream(self) -> Generator[bytes, None, None]:
+    async def stream(self) -> AsyncGenerator[bytes, None]:
         """Бесконечный генератор JPEG-кадров (MJPEG)."""
         ...
 
     @abstractmethod
-    def stream_raw(self) -> Generator[bytes, None, None]:
+    async def stream_raw(self) -> AsyncGenerator[bytes, None]:
         """Бесконечный генератор сырых JPEG-кадров для WebSocket."""
         ...
 
@@ -55,7 +57,7 @@ class MockCamera(CameraService):
         self._fps = fps
         self._temperature = temperature
 
-    def get_status(self) -> CameraStatus:
+    async def get_status(self) -> CameraStatus:
         return CameraStatus(
             connected=self._connected,
             ip=self._ip if self._connected else None,
@@ -65,49 +67,37 @@ class MockCamera(CameraService):
             gain=1.0
         )
 
-    def connect(self, ip: str) -> bool:
+    async def connect(self, ip: str) -> bool:
         self._connected = True
         self._ip = ip
         return True
 
-    def disconnect(self) -> bool:
+    async def disconnect(self) -> bool:
         self._connected = False
         return True
 
-    def stream_raw(self) -> Generator[bytes, None, None]:
-        import cv2
-        import numpy as np
-
+    async def stream_raw(self) -> AsyncGenerator[bytes, None]:
         frame_id = 0
         while True:
-            hue = (frame_id * 10) % 180
-            img = np.zeros((480, 640, 3), dtype=np.uint8)
-            img[:, :] = (hue, 200, 200)
-            img = cv2.cvtColor(img, cv2.COLOR_HSV2BGR)
-
-            cv2.putText(img, f"Mock Stream | Frame {frame_id}", (30, 240),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
-
-            _, jpeg = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 80])
-            frame_data = jpeg.tobytes()
-
-            yield frame_data
+            # Yield a tiny dummy JPEG to avoid cv2 deadlock in WSL docker
+            dummy_jpeg = b'\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x01\x00H\x00H\x00\x00\xff\xdb\x00C\x00\x08\x06\x06\x07\x06\x05\x08\x07\x07\x07\t\t\x08\n\x0c\x14\r\x0c\x0b\x0b\x0c\x19\x12\x13\x0f\x14\x1d\x1a\x1f\x1e\x1d\x1a\x1c\x1c $.\' ",#\x1c\x1c(7),01444\x1f\'9=82<.342\xff\xdb\x00C\x01\t\t\t\x0c\x0b\x0c\x18\r\r\x182!\x1c!22222222222222222222222222222222222222222222222222\xff\xc0\x00\x11\x08\x00\x01\x00\x01\x03\x01"\x00\x02\x11\x01\x03\x11\x01\xff\xc4\x00\x1f\x00\x00\x01\x05\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\xff\xc4\x00\xb5\x10\x00\x02\x01\x03\x03\x02\x04\x03\x05\x05\x04\x04\x00\x00\x01}\x01\x02\x03\x00\x04\x11\x05\x12!1A\x06\x13Qa\x07"q\x142\x81\x91\xa1\x08#B\xb1\xc1\x15R\xd1\xf0$3br\x82\t\n\x16\x17\x18\x19\x1a%&\'()*456789:CDEFGHIJSTUVWXYZcdefghijstuvwxyz\x83\x84\x85\x86\x87\x88\x89\x8a\x92\x93\x94\x95\x96\x97\x98\x99\x9a\xa2\xa3\xa4\xa5\xa6\xa7\xa8\xa9\xaa\xb2\xb3\xb4\xb5\xb6\xb7\xb8\xb9\xba\xc2\xc3\xc4\xc5\xc6\xc7\xc8\xc9\xca\xd2\xd3\xd4\xd5\xd6\xd7\xd8\xd9\xda\xe1\xe2\xe3\xe4\xe5\xe6\xe7\xe8\xe9\xea\xf1\xf2\xf3\xf4\xf5\xf6\xf7\xf8\xf9\xfa\xff\xc4\x00\x1f\x01\x00\x03\x01\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\xff\xc4\x00\xb5\x11\x00\x02\x01\x02\x04\x04\x03\x04\x07\x05\x04\x04\x00\x01\x02w\x00\x01\x02\x03\x11\x04\x05!1\x06\x12AQ\x07aq\x13"2\x81\x08\x14B\x91\xa1\xb1\xc1\t#3R\xf0\x15br\xd1\n\x16$4\xe1%\xf1\x17\x18\x19\x1a&\'()*56789:CDEFGHIJSTUVWXYZcdefghijstuvwxyz\x82\x83\x84\x85\x86\x87\x88\x89\x8a\x92\x93\x94\x95\x96\x97\x98\x99\x9a\xa2\xa3\xa4\xa5\xa6\xa7\xa8\xa9\xaa\xb2\xb3\xb4\xb5\xb6\xb7\xb8\xb9\xba\xc2\xc3\xc4\xc5\xc6\xc7\xc8\xc9\xca\xd2\xd3\xd4\xd5\xd6\xd7\xd8\xd9\xda\xe2\xe3\xe4\xe5\xe6\xe7\xe8\xe9\xea\xf2\xf3\xf4\xf5\xf6\xf7\xf8\xf9\xfa\xff\xda\x00\x0c\x03\x01\x00\x02\x11\x03\x11\x00?\x00\xfd\xfc\xa8\xa2\x8a\x00\xff\xd9'
+            yield dummy_jpeg
 
             frame_id += 1
-            time.sleep(0.033)
+            await asyncio.sleep(0.033)
 
-    def stream(self) -> Generator[bytes, None, None]:
-        for frame_data in self.stream_raw():
+    async def stream(self) -> AsyncGenerator[bytes, None]:
+        async for frame_data in self.stream_raw():
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + frame_data + b'\r\n')
 
 class ZmqCamera(CameraService):
-    """Общается с Capture Service через ZeroMQ REQ/REP"""
+    """Общается с Capture Service через ZeroMQ REQ/REP асинхронно"""
 
     def __init__(self, zmq_address: str = "tcp://localhost:5555"):
         self._cmd_address = zmq_address  # порт 5555
         self._stream_address = zmq_address.replace("5555", "5556")  # порт 5556
-        self._context = zmq.Context()
+        self._context = zmq.asyncio.Context()
         self._cmd_socket = None
         self._stream_socket = None
         self._connect_sockets()
@@ -133,42 +123,42 @@ class ZmqCamera(CameraService):
         self._cmd_socket.setsockopt(zmq.RCVTIMEO, 1000)
         self._cmd_socket.setsockopt(zmq.SNDTIMEO, 1000)
 
-    def _send_command(self, command: str, **params) -> dict:
+    async def _send_command(self, command: str, **params) -> dict:
         request = {"command": command, **params}
         try:
-            self._cmd_socket.send_json(request)
-            return self._cmd_socket.recv_json()
+            await self._cmd_socket.send_json(request)
+            return await self._cmd_socket.recv_json()
         except zmq.Again:
             self._reset_cmd_socket()
             return {"success": False, "error": "timeout"}
 
-    def get_status(self) -> CameraStatus:
+    async def get_status(self) -> CameraStatus:
         try:
-            data = self._send_command("status")
+            data = await self._send_command("status")
             if not data.get("connected", False) and not data.get("success", True):
                 return CameraStatus(connected=False)
             return CameraStatus(**data)
         except zmq.Again:
             return CameraStatus(connected=False)
 
-    def connect(self, ip: str) -> bool:
+    async def connect(self, ip: str) -> bool:
         try:
-            response = self._send_command("connect", ip=ip)
+            response = await self._send_command("connect", ip=ip)
             return response.get("success", False)
         except zmq.Again:
             return False
 
-    def disconnect(self) -> bool:
+    async def disconnect(self) -> bool:
         try:
-            response = self._send_command("disconnect")
+            response = await self._send_command("disconnect")
             return response.get("success", False)
         except zmq.Again:
             return False
 
-    def stream_raw(self) -> Generator[bytes, None, None]:
+    async def stream_raw(self) -> AsyncGenerator[bytes, None]:
         while True:
             try:
-                data = self._stream_socket.recv_json()
+                data = await self._stream_socket.recv_json()
                 if data.get("image") is not None:
                     # base64 строка -> байты
                     img_bytes = base64.b64decode(data["image"])
@@ -177,10 +167,10 @@ class ZmqCamera(CameraService):
                     yield img_bytes
             except zmq.Again:
                 pass
-            time.sleep(0.033)
+            await asyncio.sleep(0.033)
 
-    def stream(self) -> Generator[bytes, None, None]:
-        for img_bytes in self.stream_raw():
+    async def stream(self) -> AsyncGenerator[bytes, None]:
+        async for img_bytes in self.stream_raw():
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + img_bytes + b'\r\n')
 

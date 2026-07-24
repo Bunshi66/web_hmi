@@ -21,37 +21,42 @@ async def get_db_context():
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     
+    send_lock = asyncio.Lock()
+    
+    async def safe_send_json(data):
+        async with send_lock:
+            await websocket.send_json(data)
+            
     # Subscriptions for THIS client
     active_subs = set()
     
-    try:
-        async with get_db_context() as db:
-            event = Event(event_type="connection", message=f"Client connected from {websocket.client}")
-            db.add(event)
-            await db.commit()
-    except Exception as e:
-        logger.error(f"Failed to log connection: {e}")
+    #try:
+    #    async with get_db_context() as db:
+    #        event = Event(event_type="connection", message=f"Client connected from {websocket.client}")
+    #        db.add(event)
+    #        await db.commit()
+    #except Exception as e:
+    #    logger.error(f"Failed to log connection: {e}")
         
     init_msg = json.dumps({
         "action": "init",
         "capabilities": ["video", "telemetry", "events"],
         "subscriptions": list(active_subs)
     })
-    await websocket.send_text(init_msg)
+    async with send_lock:
+        await websocket.send_text(init_msg)
     
     async def send_video_frames():
         camera = get_camera_service()
         try:
-            for frame in camera.stream_raw():
+            async for frame in camera.stream_raw():
                 if "video" in active_subs:
                     payload = {
                         "action": "video",
                         "frame": base64.b64encode(frame).decode('utf-8'),
                         "timestamp": asyncio.get_event_loop().time()
                     }
-                    await websocket.send_json(payload)
-                # Yield control to avoid blocking the event loop
-                await asyncio.sleep(0.001)
+                    await safe_send_json(payload)
         except asyncio.CancelledError:
             pass
         except Exception as e:
@@ -62,9 +67,9 @@ async def websocket_endpoint(websocket: WebSocket):
         try:
             while True:
                 if "telemetry" in active_subs:
-                    status = camera.get_status().model_dump()
+                    status = (await camera.get_status()).model_dump()
                     telemetry = {"action": "telemetry", "status": status}
-                    await websocket.send_json(telemetry)
+                    await safe_send_json(telemetry)
                 await asyncio.sleep(1.0)
         except asyncio.CancelledError:
             pass
@@ -84,7 +89,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 types = message.get("types", [])
                 for t in types:
                     active_subs.add(t)
-                await websocket.send_json({
+                await safe_send_json({
                     "action": "subscribed",
                     "active": list(active_subs)
                 })
@@ -101,10 +106,10 @@ async def websocket_endpoint(websocket: WebSocket):
         video_task.cancel()
         telemetry_task.cancel()
         
-        try:
-            async with get_db_context() as db:
-                event = Event(event_type="disconnection", message=f"Client {websocket.client} disconnected")
-                db.add(event)
-                await db.commit()
-        except Exception as e:
-            logger.error(f"Failed to log disconnection: {e}")
+        #try:
+        #    async with get_db_context() as db:
+        #        event = Event(event_type="disconnection", message=f"Client {websocket.client} disconnected")
+        #        db.add(event)
+        #        await db.commit()
+        #except Exception as e:
+        #    logger.error(f"Failed to log disconnection: {e}")

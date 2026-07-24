@@ -22,16 +22,16 @@ def get_camera_service() -> CameraService:
 
 @router.get("/status", response_model=CameraStatus)
 async def get_status(camera: CameraService = Depends(get_camera_service)):
-    return camera.get_status()
+    return await camera.get_status()
 
 @router.post("/connect")
 async def connect_camera(request: ConnectRequest, camera: CameraService = Depends(get_camera_service)):
-    success = camera.connect(request.ip)
+    success = await camera.connect(request.ip)
     return {"success": success}
 
 @router.post("/disconnect")
 async def disconnect_camera(camera: CameraService = Depends(get_camera_service)):
-    success = camera.disconnect()
+    success = await camera.disconnect()
     return {"success": success}
 
 @router.get("/stream")
