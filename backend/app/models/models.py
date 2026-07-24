@@ -16,4 +16,4 @@ class Defect(Base):
     id = Column(Integer, primary_key=True, index=True)
     timestamp = Column(DateTime(timezone=True), default=func.now())
     image_path = Column(String)
-    metadata = Column(JSON, nullable=True)
+    meta_data = Column(JSON, nullable=True)
