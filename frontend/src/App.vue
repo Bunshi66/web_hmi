@@ -14,14 +14,81 @@
       </div>
     </header>
 
-    <main>
+    <nav class="tabs-nav">
+      <button 
+        class="tab-btn" 
+        :class="{ active: activeTab === 'stream' }" 
+        @click="activeTab = 'stream'"
+      >Stream</button>
+      <button 
+        class="tab-btn" 
+        :class="{ active: activeTab === 'settings' }" 
+        @click="activeTab = 'settings'"
+      >Settings</button>
+      <button 
+        class="tab-btn" 
+        :class="{ active: activeTab === 'logs' }" 
+        @click="activeTab = 'logs'"
+      >Logs</button>
+      
+      <div class="auth-panel">
+        <span class="auth-role">Role: Operator</span>
+        <button class="btn secondary" style="padding: 0.5rem 1rem; font-size: 0.875rem;">Login</button>
+      </div>
+    </nav>
+
+    <!-- STREAM TAB -->
+    <div v-show="activeTab === 'stream'" class="tab-content">
       <CameraStream :frame="frame" :fps="fps" />
 
       <div class="side-panel">
         <Controls @connect="handleConnect" @disconnect="handleDisconnect" />
         <TelemetryPanel :status="status" />
       </div>
-    </main>
+    </div>
+
+    <!-- SETTINGS TAB (MOCKUP) -->
+    <div v-show="activeTab === 'settings'" class="tab-content">
+      <div class="card" style="flex: 1;">
+        <h3>Camera Settings</h3>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Configure Hikrobot camera parameters here.</p>
+        
+        <div style="display: flex; flex-direction: column; gap: 1rem; max-width: 400px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: var(--text-primary);">Exposure Time (us)</span>
+            <input type="number" value="5000" style="background: rgba(0,0,0,0.2); border: 1px solid var(--surface-border); color: white; padding: 0.5rem; border-radius: 4px; width: 100px;">
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: var(--text-primary);">Gain</span>
+            <input type="number" value="1.0" step="0.1" style="background: rgba(0,0,0,0.2); border: 1px solid var(--surface-border); color: white; padding: 0.5rem; border-radius: 4px; width: 100px;">
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: var(--text-primary);">Trigger Mode</span>
+            <select style="background: rgba(0,0,0,0.2); border: 1px solid var(--surface-border); color: white; padding: 0.5rem; border-radius: 4px; width: 115px;">
+              <option>Continuous</option>
+              <option>Hardware</option>
+              <option>Software</option>
+            </select>
+          </div>
+          <button class="btn" style="margin-top: 1rem;">Apply Settings</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOGS TAB (MOCKUP) -->
+    <div v-show="activeTab === 'logs'" class="tab-content">
+      <div class="card" style="flex: 1; display: flex; flex-direction: column;">
+        <h3>System Logs</h3>
+        <div style="flex: 1; background: #000; border-radius: 8px; padding: 1rem; font-family: monospace; color: var(--text-secondary); font-size: 0.85rem; overflow-y: auto; min-height: 400px;">
+          [2026-08-10 12:00:01] INFO - Web HMI initialized<br>
+          [2026-08-10 12:00:05] INFO - Attempting connection to Hikrobot camera...<br>
+          [2026-08-10 12:00:08] SUCCESS - Camera connected successfully<br>
+          [2026-08-10 12:00:08] INFO - Stream started at 30 FPS<br>
+          <span style="color: var(--accent-color);">_</span>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -30,6 +97,8 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import CameraStream from './components/CameraStream.vue'
 import Controls from './components/Controls.vue'
 import TelemetryPanel from './components/TelemetryPanel.vue'
+
+const activeTab = ref('stream')
 
 const frame = ref(null)
 const fps = ref(0)
@@ -46,9 +115,8 @@ let lastFpsTime = Date.now()
 let reconnectTimeout = null
 
 const connectWebSocket = () => {
-  // If running via dev server, point to local backend API (assuming proxy or explicit URL)
-  // Usually the vite server is on 5173, backend is on 8000 or 8024
-  const wsUrl = `ws://localhost:8024/camera/ws`
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${protocol}//${window.location.host}/camera/ws`
   
   console.log(`Connecting to ${wsUrl}...`)
   ws = new WebSocket(wsUrl)
@@ -79,7 +147,6 @@ const connectWebSocket = () => {
         }
       } 
       else if (data.action === "telemetry" && data.status) {
-        // Only update telemetry values, preserve websocket connection state
         status.value = {
           ...status.value,
           ...data.status
@@ -107,7 +174,7 @@ const connectWebSocket = () => {
 
 const handleConnect = async () => {
   try {
-    const res = await fetch('http://localhost:8024/camera/connect', {
+    const res = await fetch('/camera/connect', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ip: "192.168.30.170" })
@@ -120,7 +187,7 @@ const handleConnect = async () => {
 
 const handleDisconnect = async () => {
   try {
-    const res = await fetch('http://localhost:8024/camera/disconnect', { method: 'POST' })
+    const res = await fetch('/camera/disconnect', { method: 'POST' })
     console.log("Disconnect command sent:", await res.json())
   } catch (e) {
     console.error("Error disconnecting camera", e)
@@ -230,7 +297,55 @@ header {
   100% { opacity: 1; transform: scale(1); }
 }
 
-main {
+/* Tabs CSS */
+.tabs-nav {
+  display: flex;
+  background: rgba(15, 23, 42, 0.9);
+  border-bottom: 1px solid var(--surface-border);
+  padding: 0 2rem;
+  align-items: center;
+}
+
+.tab-btn {
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  padding: 1rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.tab-btn:hover {
+  color: var(--text-primary);
+}
+
+.tab-btn.active {
+  color: var(--accent-color);
+  border-bottom-color: var(--accent-color);
+}
+
+.auth-panel {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.auth-role {
+  font-size: 0.875rem;
+  color: var(--success);
+  font-weight: 600;
+  background: rgba(16, 185, 129, 0.1);
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.tab-content {
   flex: 1;
   padding: 2rem;
   display: flex;
@@ -246,5 +361,58 @@ main {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+}
+
+.card {
+  background: var(--surface-color);
+  border: 1px solid var(--surface-border);
+  border-radius: 16px;
+  padding: 1.5rem;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.card h3 {
+  margin: 0 0 1.2rem 0;
+  font-size: 1.1rem;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn {
+  background: var(--accent-color);
+  color: white;
+  border: none;
+  padding: 0.875rem 1.5rem;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.btn:hover {
+  background: var(--accent-hover);
+  transform: translateY(-2px);
+}
+
+.btn.secondary {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+.btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+@media (max-width: 900px) {
+  .tab-content {
+    flex-direction: column;
+    padding: 1rem;
+    gap: 1rem;
+  }
 }
 </style>
