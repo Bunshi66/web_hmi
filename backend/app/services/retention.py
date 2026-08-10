@@ -2,7 +2,7 @@ import asyncio
 import os
 import datetime
 from sqlalchemy import select, delete
-from app.core.database import SessionLocal
+from app.core.database import async_session
 from app.models.models import Defect, SystemLog
 
 class RetentionWorker:
@@ -32,7 +32,7 @@ class RetentionWorker:
             try:
                 cutoff_date = datetime.datetime.now() - datetime.timedelta(days=self.retention_days)
                 
-                async with SessionLocal() as session:
+                async with async_session() as session:
                     # Find old defects to delete files
                     result = await session.execute(
                         select(Defect).where(Defect.timestamp < cutoff_date)

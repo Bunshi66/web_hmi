@@ -6,7 +6,7 @@ import zmq
 import zmq.asyncio
 from app.services.camera import CameraService
 from app.core.config import settings
-from app.core.database import SessionLocal
+from app.core.database import async_session
 from app.models.models import Defect
 import datetime
 
@@ -70,7 +70,7 @@ class MockYoloWorker:
                         
                     # 3. Save to DB
                     bbox = {"x": random.randint(100, 500), "y": random.randint(100, 300), "w": 100, "h": 100}
-                    async with SessionLocal() as session:
+                    async with async_session() as session:
                         defect = Defect(
                             defect_type="Tear",
                             confidence=confidence,

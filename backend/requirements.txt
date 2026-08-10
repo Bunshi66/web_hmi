@@ -9,4 +9,5 @@ opencv-python-headless==4.10.0.84
 sqlalchemy
 aiosqlite
 aiofiles
-websocketsasyncpg
+websockets
+asyncpg
