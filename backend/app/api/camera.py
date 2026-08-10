@@ -91,13 +91,33 @@ from app.models.models import Defect
 from sqlalchemy import desc
 
 @router.get("/defects")
-async def get_defects(limit: int = 50, offset: int = 0, db: AsyncSession = Depends(get_db)):
+async def get_defects(limit: int = 10, offset: int = 0, time_range: str = "all", db: AsyncSession = Depends(get_db)):
+    query = select(Defect)
+    
+    if time_range != "all":
+        now = datetime.datetime.now(datetime.timezone.utc)
+        if time_range == "shift":
+            start_time = now - datetime.timedelta(hours=8)
+        elif time_range == "day":
+            start_time = now - datetime.timedelta(days=1)
+        elif time_range == "week":
+            start_time = now - datetime.timedelta(days=7)
+        else:
+            start_time = now
+            
+        query = query.where(Defect.timestamp >= start_time)
+        
     result = await db.execute(
-        select(Defect).order_by(desc(Defect.timestamp)).limit(limit).offset(offset)
+        query.order_by(desc(Defect.timestamp)).limit(limit).offset(offset)
     )
     defects = result.scalars().all()
     
-    total_result = await db.execute(select(func.count()).select_from(Defect))
+    # Count total with same filter
+    count_query = select(func.count()).select_from(Defect)
+    if time_range != "all":
+        count_query = count_query.where(Defect.timestamp >= start_time)
+        
+    total_result = await db.execute(count_query)
     total = total_result.scalar()
     
     return {

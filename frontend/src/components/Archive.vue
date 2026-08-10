@@ -1,8 +1,17 @@
 <template>
   <div class="card" style="flex: 1; display: flex; flex-direction: column;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
       <h3 style="margin: 0;">Defects Archive</h3>
-      <button class="btn secondary" @click="loadDefects" style="padding: 0.5rem 1rem; font-size: 0.875rem;">Refresh</button>
+      
+      <div style="display: flex; gap: 1rem; align-items: center;">
+        <select v-model="timeRange" @change="resetAndLoad" class="filter-select">
+          <option value="all">All Time</option>
+          <option value="shift">Last Shift (8h)</option>
+          <option value="day">Last 24 Hours</option>
+          <option value="week">Last 7 Days</option>
+        </select>
+        <button class="btn secondary" @click="resetAndLoad" style="padding: 0.5rem 1rem; font-size: 0.875rem;">Refresh</button>
+      </div>
     </div>
 
     <div v-if="loading" style="text-align: center; color: var(--text-secondary); padding: 2rem;">Loading...</div>
@@ -34,6 +43,13 @@
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- Pagination -->
+    <div v-if="totalPages > 1" style="display: flex; justify-content: center; gap: 1rem; margin-top: 1.5rem; align-items: center;">
+      <button class="btn secondary" :disabled="currentPage === 1" @click="changePage(currentPage - 1)">Previous</button>
+      <span style="color: var(--text-secondary);">Page {{ currentPage }} of {{ totalPages }}</span>
+      <button class="btn secondary" :disabled="currentPage === totalPages" @click="changePage(currentPage + 1)">Next</button>
     </div>
 
     <!-- Modal for viewing image -->
@@ -71,22 +87,43 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 
 const defects = ref([])
+const totalDefects = ref(0)
 const loading = ref(true)
 const selectedDefect = ref(null)
+
+const currentPage = ref(1)
+const itemsPerPage = 10
+const timeRange = ref('all')
+
+const totalPages = computed(() => Math.ceil(totalDefects.value / itemsPerPage) || 1)
 
 const loadDefects = async () => {
   loading.value = true
   try {
-    const res = await fetch('/camera/defects')
+    const offset = (currentPage.value - 1) * itemsPerPage
+    const res = await fetch(`/camera/defects?limit=${itemsPerPage}&offset=${offset}&time_range=${timeRange.value}`)
     const data = await res.json()
     defects.value = data.items
+    totalDefects.value = data.total
   } catch (e) {
     console.error("Failed to load defects", e)
   } finally {
     loading.value = false
+  }
+}
+
+const resetAndLoad = () => {
+  currentPage.value = 1
+  loadDefects()
+}
+
+const changePage = (page) => {
+  if (page >= 1 && page <= totalPages.value) {
+    currentPage.value = page
+    loadDefects()
   }
 }
 
@@ -225,5 +262,18 @@ onMounted(() => {
   fill: none;
   stroke: #ef4444;
   stroke-width: 3;
+}
+
+.filter-select {
+  background: rgba(0,0,0,0.2);
+  border: 1px solid var(--surface-border);
+  color: white;
+  padding: 0.5rem;
+  border-radius: 4px;
+  font-family: inherit;
+  outline: none;
+}
+.filter-select option {
+  background: var(--bg-color);
 }
 </style>
