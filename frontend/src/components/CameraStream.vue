@@ -5,11 +5,13 @@
       <div style="display: flex; gap: 1rem; align-items: center;">
         <button 
           class="focus-btn" 
-          :class="{ active: focusAssist }" 
-          @click="focusAssist = !focusAssist"
+          :class="{ active: showTelemetry }" 
+          @click="showTelemetry = !showTelemetry"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
-          Focus Assist
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 20v-8m0 0V4m0 8h8m-8 0H4"></path>
+          </svg>
+          Telemetry
         </button>
         <div class="fps-counter">{{ fps }} FPS</div>
       </div>
@@ -23,22 +25,13 @@
       </div>
       
       <div v-else class="stream-content">
-        <!-- SVG Filters for GPU-accelerated effects -->
-        <svg style="position: absolute; width: 0; height: 0;">
-          <filter id="edge-detect">
-            <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0 0 0 1 0" result="gray"/>
-            <feConvolveMatrix order="3" kernelMatrix="-1 -1 -1  -1 8 -1  -1 -1 -1" in="gray" result="edges"/>
-            <feColorMatrix type="matrix" values="0 0 0 0 0   0 2 0 0 0   0 0 0 0 0   0 0 0 1 0" in="edges" />
-          </filter>
-        </svg>
-      
         <!-- The actual video frame -->
-        <img v-if="videoData.url" :src="videoData.url" alt="Camera Stream" :class="{ 'focus-filter': focusAssist }" />
-        <img v-else :src="`data:image/jpeg;base64,${videoData.frame}`" alt="Live Stream" :class="{ 'focus-filter': focusAssist }" />
+        <img v-if="videoData.url" :src="videoData.url" alt="Camera Stream" />
+        <img v-else :src="`data:image/jpeg;base64,${videoData.frame}`" alt="Live Stream" />
         
         <!-- The SVG overlay for telemetry -->
         <svg 
-          v-if="videoData.overlay_telemetry" 
+          v-if="videoData.overlay_telemetry && showTelemetry" 
           class="telemetry-overlay"
           :viewBox="`0 0 ${videoData.width || 640} ${videoData.height || 480}`"
           preserveAspectRatio="xMidYMid meet"
@@ -89,7 +82,7 @@ defineProps({
 })
 
 import { ref } from 'vue'
-const focusAssist = ref(false)
+const showTelemetry = ref(true)
 </script>
 
 <style scoped>
@@ -148,11 +141,6 @@ img {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
-  transition: opacity 0.3s ease;
-}
-
-.focus-filter {
-  filter: url(#edge-detect) contrast(150%);
 }
 
 .focus-btn {
