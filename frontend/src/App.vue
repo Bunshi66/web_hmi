@@ -30,6 +30,11 @@
         :class="{ active: activeTab === 'logs' }" 
         @click="loadLogs"
       >Logs</button>
+      <button 
+        class="tab-btn" 
+        :class="{ active: activeTab === 'archive' }" 
+        @click="activeTab = 'archive'"
+      >Archive</button>
       
       <div class="auth-panel">
         <span class="auth-role" :class="roleClass">Role: {{ userRole }}</span>
@@ -91,6 +96,11 @@
       </div>
     </div>
 
+    <!-- ARCHIVE TAB -->
+    <div v-show="activeTab === 'archive'" class="tab-content">
+      <Archive />
+    </div>
+
     <LoginModal :show="showAuth" @close="showAuth = false" @role-selected="handleRoleChange" />
   </div>
 </template>
@@ -101,6 +111,7 @@ import CameraStream from './components/CameraStream.vue'
 import Controls from './components/Controls.vue'
 import TelemetryPanel from './components/TelemetryPanel.vue'
 import LoginModal from './components/LoginModal.vue'
+import Archive from './components/Archive.vue'
 
 const activeTab = ref('stream')
 const showAuth = ref(false)
@@ -202,25 +213,47 @@ const connectWebSocket = () => {
     ws.send(JSON.stringify({ action: "subscribe", types: ["video", "telemetry"] }))
   }
 
-  ws.onmessage = (event) => {
+  ws.onmessage = async (event) => {
     try {
-      const data = JSON.parse(event.data)
-      
-      if (data.action === "video" && data.frame) {
-        videoData.value = data
-        serviceTelemetryData.value = data.service_telemetry
-        framesReceived++
+      if (event.data instanceof Blob) {
+        const arrayBuffer = await event.data.arrayBuffer()
+        const dataView = new DataView(arrayBuffer)
+        const metaLen = dataView.getUint32(0, true) // little endian
         
-        const now = Date.now()
-        if (now - lastFpsTime >= 1000) {
-          fps.value = framesReceived
-          framesReceived = 0
-          lastFpsTime = now
+        const metaBytes = new Uint8Array(arrayBuffer, 4, metaLen)
+        const metaStr = new TextDecoder().decode(metaBytes)
+        const data = JSON.parse(metaStr)
+        
+        const imgBytes = new Uint8Array(arrayBuffer, 4 + metaLen)
+        const blob = new Blob([imgBytes], { type: 'image/jpeg' })
+        const url = URL.createObjectURL(blob)
+        
+        if (data.action === "video") {
+          // Release old URL to avoid memory leak
+          if (videoData.value && videoData.value.url) {
+            URL.revokeObjectURL(videoData.value.url)
+          }
+          data.url = url
+          
+          videoData.value = data
+          serviceTelemetryData.value = data.service_telemetry
+          if (data.camera_temp !== undefined && data.camera_temp !== 0.0) {
+            status.value.temperature = data.camera_temp
+          }
+          framesReceived++
+          
+          const now = Date.now()
+          if (now - lastFpsTime >= 1000) {
+            fps.value = framesReceived
+            framesReceived = 0
+            lastFpsTime = now
+          }
         }
-      } 
-      else if (data.action === "telemetry" && data.status) {
-        status.value = { ...status.value, ...data.status }
-        // Removed updating settingsForm from telemetry to prevent input overwrite
+      } else {
+        const data = JSON.parse(event.data)
+        if (data.action === "telemetry" && data.status) {
+          status.value = { ...status.value, ...data.status }
+        }
       }
     } catch (e) {
       console.error("Error parsing message", e)

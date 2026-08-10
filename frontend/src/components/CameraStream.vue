@@ -2,7 +2,17 @@
   <div class="video-container">
     <div class="video-header">
       <div class="video-title">Live Camera Stream</div>
-      <div class="fps-counter">{{ fps }} FPS</div>
+      <div style="display: flex; gap: 1rem; align-items: center;">
+        <button 
+          class="focus-btn" 
+          :class="{ active: focusAssist }" 
+          @click="focusAssist = !focusAssist"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+          Focus Assist
+        </button>
+        <div class="fps-counter">{{ fps }} FPS</div>
+      </div>
     </div>
     <div class="video-wrapper">
       <div v-if="!videoData || !videoData.frame" class="no-signal">
@@ -13,8 +23,18 @@
       </div>
       
       <div v-else class="stream-content">
+        <!-- SVG Filters for GPU-accelerated effects -->
+        <svg style="position: absolute; width: 0; height: 0;">
+          <filter id="edge-detect">
+            <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0 0 0 1 0" result="gray"/>
+            <feConvolveMatrix order="3" kernelMatrix="-1 -1 -1  -1 8 -1  -1 -1 -1" in="gray" result="edges"/>
+            <feColorMatrix type="matrix" values="0 0 0 0 0   0 2 0 0 0   0 0 0 0 0   0 0 0 1 0" in="edges" />
+          </filter>
+        </svg>
+      
         <!-- The actual video frame -->
-        <img :src="`data:image/jpeg;base64,${videoData.frame}`" alt="Live Stream" />
+        <img v-if="videoData.url" :src="videoData.url" alt="Camera Stream" :class="{ 'focus-filter': focusAssist }" />
+        <img v-else :src="`data:image/jpeg;base64,${videoData.frame}`" alt="Live Stream" :class="{ 'focus-filter': focusAssist }" />
         
         <!-- The SVG overlay for telemetry -->
         <svg 
@@ -67,6 +87,9 @@ defineProps({
     default: 0
   }
 })
+
+import { ref } from 'vue'
+const focusAssist = ref(false)
 </script>
 
 <style scoped>
@@ -126,6 +149,35 @@ img {
   max-height: 100%;
   object-fit: contain;
   transition: opacity 0.3s ease;
+}
+
+.focus-filter {
+  filter: url(#edge-detect) contrast(150%);
+}
+
+.focus-btn {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--surface-border);
+  padding: 0.25rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.focus-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.focus-btn.active {
+  background: rgba(16, 185, 129, 0.2);
+  color: var(--success);
+  border-color: var(--success);
 }
 
 .telemetry-overlay {

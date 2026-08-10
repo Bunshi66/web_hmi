@@ -15,6 +15,7 @@ from MvImport.CameraParams_header import (
     MV_CC_DEVICE_INFO,
     MV_FRAME_OUT,
     MV_FRAME_OUT_INFO_EX,
+    MVCC_FLOATVALUE,
 )
 from MvImport.MvErrorDefine_const import MV_OK
 from MvImport.PixelType_header import PixelType_Gvsp_BGR8_Packed
@@ -121,6 +122,34 @@ class HikrobotCamera:
         if ret != MV_OK:
             print(f"[ERROR] Failed to set Gain: 0x{ret:08X}")
             return False
+        return True
+
+    def get_temperature(self) -> float:
+        """Получить температуру камеры."""
+        if not self._connected:
+            return 0.0
+        stFloatValue = MVCC_FLOATVALUE()
+        ret = self._cam.MV_CC_GetFloatValue("DeviceTemperature", stFloatValue)
+        if ret == MV_OK:
+            return stFloatValue.fCurValue
+        return 0.0
+
+    def trigger_defect(self) -> bool:
+        """Аппаратный триггер: Line 1, Software"""
+        if not self._connected:
+            return False
+        
+        ret1 = self._cam.MV_CC_SetEnumValueByString("LineSelector", "Line1")
+        ret2 = self._cam.MV_CC_SetEnumValueByString("LineMode", "Output") # Often needed for Line1 if it's bi-directional
+        ret3 = self._cam.MV_CC_SetEnumValueByString("LineSource", "Software")
+        ret4 = self._cam.MV_CC_SetCommandValue("LineTriggerSoftware")
+        
+        # Some models use UserOutputValue instead, but we'll try LineTriggerSoftware first
+        # based on typical Hikrobot configuration
+        if ret1 != MV_OK or ret3 != MV_OK or ret4 != MV_OK:
+            print(f"[ERROR] Trigger defect failed: 0x{ret1:08X} 0x{ret3:08X} 0x{ret4:08X}")
+            return False
+        print("[INFO] Defect triggered via GPIO (Line 1)")
         return True
     def get_frame(self, timeout_ms: int = 1000) -> np.ndarray | None:
         """Получить кадр как numpy array (BGR)."""

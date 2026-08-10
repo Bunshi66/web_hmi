@@ -48,19 +48,35 @@ async def websocket_endpoint(websocket: WebSocket):
     
     async def send_video_frames():
         camera = get_camera_service()
+        frame_count = 0
         try:
             async for frame_data in camera.stream_raw():
                 if "video" in active_subs:
+                    frame_count += 1
+                    # Frame skipping: send every 3rd frame (~10 FPS for UI)
+                    if frame_count % 3 != 0:
+                        continue
+                        
+                    img_bytes = frame_data.pop("image", b"")
                     payload = {
                         "action": "video",
-                        "frame": frame_data["image"],
                         "width": frame_data.get("width", 640),
                         "height": frame_data.get("height", 480),
+                        "camera_temp": frame_data.get("camera_temp", 0.0),
                         "overlay_telemetry": frame_data.get("overlay_telemetry", {}),
                         "service_telemetry": frame_data.get("service_telemetry", {}),
                         "timestamp": frame_data.get("timestamp", asyncio.get_event_loop().time())
                     }
-                    await safe_send_json(payload)
+                    
+                    meta_json = json.dumps(payload).encode('utf-8')
+                    len_bytes = len(meta_json).to_bytes(4, byteorder='little')
+                    
+                    if isinstance(img_bytes, str):
+                        img_bytes = base64.b64decode(img_bytes)
+                        
+                    blob = len_bytes + meta_json + img_bytes
+                    async with send_lock:
+                        await websocket.send_bytes(blob)
         except asyncio.CancelledError:
             pass
         except Exception as e:
