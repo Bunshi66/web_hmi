@@ -271,6 +271,26 @@
             100% { transform: rotate(360deg); }
         }
 
+        @media (max-width: 900px) {
+            main {
+                flex-direction: column;
+                padding: 1rem;
+                gap: 1rem;
+            }
+            
+            .video-container, .side-panel {
+                flex: none;
+                width: 100%;
+            }
+            
+            .video-wrapper {
+                min-height: 250px;
+            }
+            
+            header {
+                padding: 1rem;
+            }
+        }
     </style>
 </head>
 <body>
