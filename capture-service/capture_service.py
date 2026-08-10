@@ -4,71 +4,43 @@ import zmq
 import threading
 import base64
 import cv2
-# from camera_sdk import HikrobotCamera
+from camera_sdk import HikrobotCamera
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class CameraCapture:
     def __init__(self):
-        self._cap = None
-        self._ip = None
+        self._cam = HikrobotCamera()
         self._connected = False
-        self._fps = 0.0
-        self._temperature = None
-        self._exposure = 0
-        self._gain = 0.0
+        self._ip = None
+        self._fps = 30.0
+        self._temperature = 42.0
+        self._exposure = 5000
+        self._gain = 1.0
 
     def connect(self, ip: str) -> bool:
         try:
-            import sys
-            self._cap = None
-            self._mock_mode = False
-
-            # Перебираем индексы с 0 по 4, чтобы найти реальную камеру
-            for idx in range(5):
-                if sys.platform == 'win32':
-                    cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
-                    if not cap.isOpened():
-                        cap = cv2.VideoCapture(idx)
-                else:
-                    cap = cv2.VideoCapture(idx)
-
-                if cap.isOpened():
-                    self._cap = cap
-                    logger.info(f"Успешно открыта физическая камера (index {idx})")
-                    break
-
-            if self._cap is None:
-                logger.error("Не удалось открыть физическую веб-камеру. Включаем режим заглушки (Mock).")
-                self._mock_mode = True
-
-            self._connected = True
-            self._ip = ip
-            self._fps = 30.0 if getattr(self, '_mock_mode', False) else (self._cap.get(cv2.CAP_PROP_FPS) or 30.0)
-            self._temperature = 42.0  # Фейковая температура для телеметрии
-            self._exposure = 5000 if getattr(self, '_mock_mode', False) else int(self._cap.get(cv2.CAP_PROP_EXPOSURE))
-            self._gain = 1.0
-            self._frame_id = 0
-
-            cam_type = "mock camera" if getattr(self, '_mock_mode', False) else "local webcam"
-            logger.info(f"Connected to {cam_type} (requested ip: {ip})")
-            return True
+            logger.info(f"Connecting to Hikrobot camera...")
+            success = self._cam.connect(ip)
+            if success:
+                success = self._cam.start_grabbing()
+            
+            self._connected = success
+            self._ip = ip if success else None
+            return success
         except Exception as e:
-            logger.error(f"Failed to connect to webcam: {e}")
+            logger.error(f"Failed to connect: {e}")
             return False
 
     def disconnect(self) -> bool:
         try:
-            if self._cap:
-                self._cap.release()
-                self._cap = None
-            self._connected = False
-            self._ip = None
-            self._fps = 0.0
-            self._temperature = None
-            self._exposure = 0
-            self._gain = 0.0
+            if self._connected:
+                self._cam.stop_grabbing()
+                self._cam.release()
+                self._cam = HikrobotCamera()
+                self._connected = False
+                self._ip = None
             return True
         except Exception as e:
             logger.error(f"Failed to disconnect: {e}")
@@ -88,28 +60,8 @@ class CameraCapture:
         if not self._connected:
             return {"image": None, "width": 0, "height": 0, "timestamp": 0}
 
-        if getattr(self, '_mock_mode', False):
-            import numpy as np
-            hue = (self._frame_id * 10) % 180
-            img = np.zeros((480, 640, 3), dtype=np.uint8)
-            img[:, :] = (hue, 200, 200)
-            img = cv2.cvtColor(img, cv2.COLOR_HSV2BGR)
-            cv2.putText(img, f"Mock Stream | Frame {self._frame_id}", (30, 240),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
-            self._frame_id += 1
-            _, jpeg = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 80])
-            return {
-                "image": base64.b64encode(jpeg.tobytes()).decode("utf-8"),
-                "width": 640,
-                "height": 480,
-                "timestamp": time.time()
-            }
-
-        if self._cap is None:
-             return {"image": None, "width": 0, "height": 0, "timestamp": time.time()}
-
-        ret, frame = self._cap.read()
-        if not ret or frame is None:
+        frame = self._cam.get_frame(timeout_ms=1000)
+        if frame is None:
             return {"image": None, "width": 0, "height": 0, "timestamp": time.time()}
 
         # BGR → JPEG → base64
