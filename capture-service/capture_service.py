@@ -20,6 +20,8 @@ class CameraCapture:
         self._gain = 1.0
 
     def connect(self, ip: str) -> bool:
+        if self._connected:
+            return True
         try:
             logger.info(f"Connecting to Hikrobot camera...")
             success = self._cam.connect(ip)

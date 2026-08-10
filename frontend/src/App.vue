@@ -135,9 +135,18 @@ const roleClass = computed(() => {
   return 'role-operator'
 })
 
-const handleRoleChange = (role) => {
+const handleRoleChange = async (role) => {
   userRole.value = role
   localStorage.setItem('userRole', role)
+  // Request the backend to log this role change
+  try {
+    await fetch('/camera/log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: `Role changed to ${role}` })
+    })
+    loadLogs()
+  } catch (e) {}
 }
 
 const loadLogs = async () => {
@@ -211,8 +220,7 @@ const connectWebSocket = () => {
       } 
       else if (data.action === "telemetry" && data.status) {
         status.value = { ...status.value, ...data.status }
-        settingsForm.value.exposure = data.status.exposure
-        settingsForm.value.gain = data.status.gain
+        // Removed updating settingsForm from telemetry to prevent input overwrite
       }
     } catch (e) {
       console.error("Error parsing message", e)
