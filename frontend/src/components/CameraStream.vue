@@ -15,7 +15,7 @@
       </div>
     </div>
     <div class="video-wrapper">
-      <div v-if="!videoData || !videoData.frame" class="no-signal">
+      <div v-if="!videoData || (!videoData.frame && !videoData.url)" class="no-signal">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"></path>
         </svg>

@@ -28,7 +28,7 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.send_json(data)
             
     # Subscriptions for THIS client
-    active_subs = {"video", "telemetry"}
+    active_subs = set()
     
     #try:
     #    async with get_db_context() as db:
