@@ -77,6 +77,9 @@ async def websocket_endpoint(websocket: WebSocket):
                     blob = len_bytes + meta_json + img_bytes
                     async with send_lock:
                         await websocket.send_bytes(blob)
+                        
+                    if frame_count % 30 == 0:
+                        logger.info(f"Pushed frame to UI. Meta size: {len(meta_json)}, Image size: {len(img_bytes)}")
         except asyncio.CancelledError:
             pass
         except Exception as e:

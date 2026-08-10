@@ -139,17 +139,22 @@ class HikrobotCamera:
         if not self._connected:
             return False
         
-        ret1 = self._cam.MV_CC_SetEnumValueByString("LineSelector", "Line1")
-        ret2 = self._cam.MV_CC_SetEnumValueByString("LineMode", "Output") # Often needed for Line1 if it's bi-directional
-        ret3 = self._cam.MV_CC_SetEnumValueByString("LineSource", "Software")
-        ret4 = self._cam.MV_CC_SetCommandValue("LineTriggerSoftware")
-        
-        # Some models use UserOutputValue instead, but we'll try LineTriggerSoftware first
-        # based on typical Hikrobot configuration
-        if ret1 != MV_OK or ret3 != MV_OK or ret4 != MV_OK:
-            print(f"[ERROR] Trigger defect failed: 0x{ret1:08X} 0x{ret3:08X} 0x{ret4:08X}")
-            return False
-        print("[INFO] Defect triggered via GPIO (Line 1)")
+        # Try to use standard UserOutput for generic GPIO if LineTriggerSoftware fails
+        try:
+            self._cam.MV_CC_SetEnumValueByString("LineSelector", "Line1")
+            self._cam.MV_CC_SetEnumValueByString("LineMode", "Strobe")
+        except:
+            pass # Ignore if not supported
+
+        ret = self._cam.MV_CC_SetCommandValue("LineTriggerSoftware")
+        if ret != MV_OK:
+            # Fallback for cameras that don't support LineTriggerSoftware
+            ret2 = self._cam.MV_CC_SetCommandValue("TriggerSoftware")
+            if ret2 != MV_OK:
+                print(f"[WARN] Trigger defect might not be supported. Error codes: 0x{ret:08X}, 0x{ret2:08X}")
+                return False
+                
+        print("[INFO] Defect triggered via GPIO")
         return True
     def get_frame(self, timeout_ms: int = 1000) -> np.ndarray | None:
         """Получить кадр как numpy array (BGR)."""

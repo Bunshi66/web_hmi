@@ -195,20 +195,27 @@ class ZmqCamera(CameraService):
             return False
 
     async def stream_raw(self) -> AsyncGenerator[dict, None]:
-        while True:
-            try:
-                metadata = await self._stream_socket.recv_json()
-                if self._stream_socket.getsockopt(zmq.RCVMORE):
-                    jpeg_bytes = await self._stream_socket.recv()
-                    metadata["image"] = jpeg_bytes
-                    yield metadata
-                else:
-                    # Fallback for old capture_service
-                    if metadata.get("image") is not None:
+        sub_socket = self._context.socket(zmq.SUB)
+        sub_socket.connect(self._stream_address)
+        sub_socket.setsockopt_string(zmq.SUBSCRIBE, "")
+        sub_socket.setsockopt(zmq.RCVTIMEO, 1000)
+        
+        try:
+            while True:
+                try:
+                    metadata = await sub_socket.recv_json()
+                    if sub_socket.getsockopt(zmq.RCVMORE):
+                        jpeg_bytes = await sub_socket.recv()
+                        metadata["image"] = jpeg_bytes
                         yield metadata
-            except zmq.Again:
-                pass
-            await asyncio.sleep(0.01)
+                    else:
+                        if metadata.get("image") is not None:
+                            yield metadata
+                except zmq.Again:
+                    pass
+                await asyncio.sleep(0.01)
+        finally:
+            sub_socket.close()
 
     async def stream(self) -> AsyncGenerator[bytes, None]:
         async for data_dict in self.stream_raw():
