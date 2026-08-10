@@ -204,6 +204,7 @@ class ZmqCamera(CameraService):
             while True:
                 try:
                     metadata = await sub_socket.recv_json()
+                    print(f"[ZmqCamera] Received frame metadata in stream_raw: {metadata.get('timestamp')}")
                     if sub_socket.getsockopt(zmq.RCVMORE):
                         jpeg_bytes = await sub_socket.recv()
                         metadata["image"] = jpeg_bytes

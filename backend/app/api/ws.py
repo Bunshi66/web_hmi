@@ -112,6 +112,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 types = message.get("types", [])
                 for t in types:
                     active_subs.add(t)
+                print(f"[WS] Client subscribed to {types}. Active: {active_subs}")
                 await safe_send_json({
                     "action": "subscribed",
                     "active": list(active_subs)
