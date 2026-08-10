@@ -49,12 +49,16 @@ async def websocket_endpoint(websocket: WebSocket):
     async def send_video_frames():
         camera = get_camera_service()
         try:
-            async for frame in camera.stream_raw():
+            async for frame_data in camera.stream_raw():
                 if "video" in active_subs:
                     payload = {
                         "action": "video",
-                        "frame": base64.b64encode(frame).decode('utf-8'),
-                        "timestamp": asyncio.get_event_loop().time()
+                        "frame": frame_data["image"],
+                        "width": frame_data.get("width", 640),
+                        "height": frame_data.get("height", 480),
+                        "overlay_telemetry": frame_data.get("overlay_telemetry", {}),
+                        "service_telemetry": frame_data.get("service_telemetry", {}),
+                        "timestamp": frame_data.get("timestamp", asyncio.get_event_loop().time())
                     }
                     await safe_send_json(payload)
         except asyncio.CancelledError:

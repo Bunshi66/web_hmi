@@ -43,8 +43,13 @@ class CameraService(ABC):
         ...
 
     @abstractmethod
-    async def stream_raw(self) -> AsyncGenerator[bytes, None]:
-        """Бесконечный генератор сырых JPEG-кадров для WebSocket."""
+    async def stream_raw(self) -> AsyncGenerator[dict, None]:
+        """Бесконечный генератор словарей (кадр + телеметрия) для WebSocket."""
+        ...
+
+    @abstractmethod
+    async def set_settings(self, exposure: Optional[float] = None, gain: Optional[float] = None) -> bool:
+        """Применить настройки к камере"""
         ...
 
 class MockCamera(CameraService):
@@ -76,12 +81,19 @@ class MockCamera(CameraService):
         self._connected = False
         return True
 
-    async def stream_raw(self) -> AsyncGenerator[bytes, None]:
+    async def set_settings(self, exposure: Optional[float] = None, gain: Optional[float] = None) -> bool:
+        return True
+
+    async def stream_raw(self) -> AsyncGenerator[dict, None]:
         frame_id = 0
         while True:
             # Yield a tiny dummy JPEG to avoid cv2 deadlock in WSL docker
             dummy_jpeg = b'\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x01\x00H\x00H\x00\x00\xff\xdb\x00C\x00\x08\x06\x06\x07\x06\x05\x08\x07\x07\x07\t\t\x08\n\x0c\x14\r\x0c\x0b\x0b\x0c\x19\x12\x13\x0f\x14\x1d\x1a\x1f\x1e\x1d\x1a\x1c\x1c $.\' ",#\x1c\x1c(7),01444\x1f\'9=82<.342\xff\xdb\x00C\x01\t\t\t\x0c\x0b\x0c\x18\r\r\x182!\x1c!22222222222222222222222222222222222222222222222222\xff\xc0\x00\x11\x08\x00\x01\x00\x01\x03\x01"\x00\x02\x11\x01\x03\x11\x01\xff\xc4\x00\x1f\x00\x00\x01\x05\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\xff\xc4\x00\xb5\x10\x00\x02\x01\x03\x03\x02\x04\x03\x05\x05\x04\x04\x00\x00\x01}\x01\x02\x03\x00\x04\x11\x05\x12!1A\x06\x13Qa\x07"q\x142\x81\x91\xa1\x08#B\xb1\xc1\x15R\xd1\xf0$3br\x82\t\n\x16\x17\x18\x19\x1a%&\'()*456789:CDEFGHIJSTUVWXYZcdefghijstuvwxyz\x83\x84\x85\x86\x87\x88\x89\x8a\x92\x93\x94\x95\x96\x97\x98\x99\x9a\xa2\xa3\xa4\xa5\xa6\xa7\xa8\xa9\xaa\xb2\xb3\xb4\xb5\xb6\xb7\xb8\xb9\xba\xc2\xc3\xc4\xc5\xc6\xc7\xc8\xc9\xca\xd2\xd3\xd4\xd5\xd6\xd7\xd8\xd9\xda\xe1\xe2\xe3\xe4\xe5\xe6\xe7\xe8\xe9\xea\xf1\xf2\xf3\xf4\xf5\xf6\xf7\xf8\xf9\xfa\xff\xc4\x00\x1f\x01\x00\x03\x01\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\xff\xc4\x00\xb5\x11\x00\x02\x01\x02\x04\x04\x03\x04\x07\x05\x04\x04\x00\x01\x02w\x00\x01\x02\x03\x11\x04\x05!1\x06\x12AQ\x07aq\x13"2\x81\x08\x14B\x91\xa1\xb1\xc1\t#3R\xf0\x15br\xd1\n\x16$4\xe1%\xf1\x17\x18\x19\x1a&\'()*56789:CDEFGHIJSTUVWXYZcdefghijstuvwxyz\x82\x83\x84\x85\x86\x87\x88\x89\x8a\x92\x93\x94\x95\x96\x97\x98\x99\x9a\xa2\xa3\xa4\xa5\xa6\xa7\xa8\xa9\xaa\xb2\xb3\xb4\xb5\xb6\xb7\xb8\xb9\xba\xc2\xc3\xc4\xc5\xc6\xc7\xc8\xc9\xca\xd2\xd3\xd4\xd5\xd6\xd7\xd8\xd9\xda\xe2\xe3\xe4\xe5\xe6\xe7\xe8\xe9\xea\xf2\xf3\xf4\xf5\xf6\xf7\xf8\xf9\xfa\xff\xda\x00\x0c\x03\x01\x00\x02\x11\x03\x11\x00?\x00\xfd\xfc\xa8\xa2\x8a\x00\xff\xd9'
-            yield dummy_jpeg
+            yield {
+                "image": base64.b64encode(dummy_jpeg).decode("utf-8"),
+                "overlay_telemetry": {},
+                "service_telemetry": {}
+            }
 
             frame_id += 1
             await asyncio.sleep(0.033)
@@ -155,22 +167,29 @@ class ZmqCamera(CameraService):
         except zmq.Again:
             return False
 
-    async def stream_raw(self) -> AsyncGenerator[bytes, None]:
+    async def set_settings(self, exposure: Optional[float] = None, gain: Optional[float] = None) -> bool:
+        try:
+            params = {}
+            if exposure is not None: params["exposure"] = exposure
+            if gain is not None: params["gain"] = gain
+            response = await self._send_command("set_settings", **params)
+            return response.get("success", False)
+        except zmq.Again:
+            return False
+
+    async def stream_raw(self) -> AsyncGenerator[dict, None]:
         while True:
             try:
                 data = await self._stream_socket.recv_json()
                 if data.get("image") is not None:
-                    # base64 строка -> байты
-                    img_bytes = base64.b64decode(data["image"])
-                    if isinstance(img_bytes, str):
-                        img_bytes = img_bytes.encode()
-                    yield img_bytes
+                    yield data
             except zmq.Again:
                 pass
             await asyncio.sleep(0.033)
 
     async def stream(self) -> AsyncGenerator[bytes, None]:
-        async for img_bytes in self.stream_raw():
+        async for data_dict in self.stream_raw():
+            img_bytes = base64.b64decode(data_dict["image"])
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + img_bytes + b'\r\n')
 

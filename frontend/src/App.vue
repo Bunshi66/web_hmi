@@ -28,18 +28,18 @@
       <button 
         class="tab-btn" 
         :class="{ active: activeTab === 'logs' }" 
-        @click="activeTab = 'logs'"
+        @click="loadLogs"
       >Logs</button>
       
       <div class="auth-panel">
-        <span class="auth-role">Role: Operator</span>
-        <button class="btn secondary" style="padding: 0.5rem 1rem; font-size: 0.875rem;">Login</button>
+        <span class="auth-role" :class="roleClass">Role: {{ userRole }}</span>
+        <button class="btn secondary" style="padding: 0.5rem 1rem; font-size: 0.875rem;" @click="showAuth = true">Login</button>
       </div>
     </nav>
 
     <!-- STREAM TAB -->
     <div v-show="activeTab === 'stream'" class="tab-content">
-      <CameraStream :frame="frame" :fps="fps" />
+      <CameraStream :videoData="videoData" :fps="fps" />
 
       <div class="side-panel">
         <Controls @connect="handleConnect" @disconnect="handleDisconnect" />
@@ -47,72 +47,138 @@
       </div>
     </div>
 
-    <!-- SETTINGS TAB (MOCKUP) -->
+    <!-- SETTINGS TAB -->
     <div v-show="activeTab === 'settings'" class="tab-content">
       <div class="card" style="flex: 1;">
         <h3>Camera Settings</h3>
         <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Configure Hikrobot camera parameters here.</p>
         
-        <div style="display: flex; flex-direction: column; gap: 1rem; max-width: 400px;">
+        <div v-if="userRole === 'Operator'" class="warning-alert">
+          <strong>Access Denied:</strong> Operators cannot modify camera settings. Please login as Engineer or Admin.
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 1rem; max-width: 400px; margin-top: 1rem;" :class="{ disabled: userRole === 'Operator' }">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="color: var(--text-primary);">Exposure Time (us)</span>
-            <input type="number" value="5000" style="background: rgba(0,0,0,0.2); border: 1px solid var(--surface-border); color: white; padding: 0.5rem; border-radius: 4px; width: 100px;">
+            <input type="number" v-model.number="settingsForm.exposure" :disabled="userRole === 'Operator'" style="background: rgba(0,0,0,0.2); border: 1px solid var(--surface-border); color: white; padding: 0.5rem; border-radius: 4px; width: 100px;">
           </div>
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="color: var(--text-primary);">Gain</span>
-            <input type="number" value="1.0" step="0.1" style="background: rgba(0,0,0,0.2); border: 1px solid var(--surface-border); color: white; padding: 0.5rem; border-radius: 4px; width: 100px;">
+            <input type="number" v-model.number="settingsForm.gain" step="0.1" :disabled="userRole === 'Operator'" style="background: rgba(0,0,0,0.2); border: 1px solid var(--surface-border); color: white; padding: 0.5rem; border-radius: 4px; width: 100px;">
           </div>
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="color: var(--text-primary);">Trigger Mode</span>
-            <select style="background: rgba(0,0,0,0.2); border: 1px solid var(--surface-border); color: white; padding: 0.5rem; border-radius: 4px; width: 115px;">
-              <option>Continuous</option>
-              <option>Hardware</option>
-              <option>Software</option>
-            </select>
-          </div>
-          <button class="btn" style="margin-top: 1rem;">Apply Settings</button>
+          <button class="btn" style="margin-top: 1rem;" :disabled="userRole === 'Operator'" @click="applySettings">Apply Settings</button>
         </div>
       </div>
     </div>
 
-    <!-- LOGS TAB (MOCKUP) -->
+    <!-- LOGS TAB -->
     <div v-show="activeTab === 'logs'" class="tab-content">
       <div class="card" style="flex: 1; display: flex; flex-direction: column;">
-        <h3>System Logs</h3>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <h3 style="margin: 0;">System Logs</h3>
+          <button v-if="userRole !== 'Operator'" class="btn secondary" @click="downloadLogs" style="padding: 0.5rem 1rem; font-size: 0.875rem;">Download .txt</button>
+        </div>
+        
         <div style="flex: 1; background: #000; border-radius: 8px; padding: 1rem; font-family: monospace; color: var(--text-secondary); font-size: 0.85rem; overflow-y: auto; min-height: 400px;">
-          [2026-08-10 12:00:01] INFO - Web HMI initialized<br>
-          [2026-08-10 12:00:05] INFO - Attempting connection to Hikrobot camera...<br>
-          [2026-08-10 12:00:08] SUCCESS - Camera connected successfully<br>
-          [2026-08-10 12:00:08] INFO - Stream started at 30 FPS<br>
+          <div v-for="(log, i) in systemLogs" :key="i">{{ log }}</div>
+          <div v-if="serviceTelemetryData" style="color: var(--success); margin-top: 1rem;">
+            -- Live Service Telemetry --<br>
+            Processing Time: {{ serviceTelemetryData.processing_time_ms }} ms<br>
+            Engine: {{ serviceTelemetryData.capture_engine }}
+          </div>
           <span style="color: var(--accent-color);">_</span>
         </div>
       </div>
     </div>
 
+    <LoginModal :show="showAuth" @close="showAuth = false" @role-selected="handleRoleChange" />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import CameraStream from './components/CameraStream.vue'
 import Controls from './components/Controls.vue'
 import TelemetryPanel from './components/TelemetryPanel.vue'
+import LoginModal from './components/LoginModal.vue'
 
 const activeTab = ref('stream')
+const showAuth = ref(false)
+const userRole = ref(localStorage.getItem('userRole') || 'Operator')
 
-const frame = ref(null)
+const videoData = ref(null)
+const serviceTelemetryData = ref(null)
 const fps = ref(0)
 const status = ref({
   connected: false,
   ip: null,
   temperature: null,
-  exposure: 0
+  exposure: 5000,
+  gain: 1.0
 })
+
+const settingsForm = ref({
+  exposure: 5000,
+  gain: 1.0
+})
+
+const systemLogs = ref([])
 
 let ws = null
 let framesReceived = 0
 let lastFpsTime = Date.now()
 let reconnectTimeout = null
+
+const roleClass = computed(() => {
+  if (userRole.value === 'Admin') return 'role-admin'
+  if (userRole.value === 'Engineer') return 'role-engineer'
+  return 'role-operator'
+})
+
+const handleRoleChange = (role) => {
+  userRole.value = role
+  localStorage.setItem('userRole', role)
+}
+
+const loadLogs = async () => {
+  activeTab.value = 'logs'
+  try {
+    const res = await fetch('/camera/logs')
+    const data = await res.json()
+    systemLogs.value = data.logs
+  } catch (e) {
+    console.error('Failed to load logs', e)
+  }
+}
+
+const downloadLogs = () => {
+  const content = systemLogs.value.join('\n')
+  const blob = new Blob([content], { type: 'text/plain' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'web_hmi_logs.txt'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+const applySettings = async () => {
+  try {
+    const res = await fetch('/camera/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settingsForm.value)
+    })
+    const data = await res.json()
+    if (data.success) {
+      alert('Settings applied successfully')
+    } else {
+      alert('Failed to apply settings')
+    }
+  } catch (e) {
+    console.error("Error applying settings", e)
+  }
+}
 
 const connectWebSocket = () => {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -124,11 +190,7 @@ const connectWebSocket = () => {
   ws.onopen = () => {
     console.log('WebSocket Connected')
     status.value.connected = true
-    
-    ws.send(JSON.stringify({
-      action: "subscribe",
-      types: ["video", "telemetry"]
-    }))
+    ws.send(JSON.stringify({ action: "subscribe", types: ["video", "telemetry"] }))
   }
 
   ws.onmessage = (event) => {
@@ -136,7 +198,8 @@ const connectWebSocket = () => {
       const data = JSON.parse(event.data)
       
       if (data.action === "video" && data.frame) {
-        frame.value = data.frame
+        videoData.value = data
+        serviceTelemetryData.value = data.service_telemetry
         framesReceived++
         
         const now = Date.now()
@@ -147,10 +210,9 @@ const connectWebSocket = () => {
         }
       } 
       else if (data.action === "telemetry" && data.status) {
-        status.value = {
-          ...status.value,
-          ...data.status
-        }
+        status.value = { ...status.value, ...data.status }
+        settingsForm.value.exposure = data.status.exposure
+        settingsForm.value.gain = data.status.gain
       }
     } catch (e) {
       console.error("Error parsing message", e)
@@ -160,9 +222,8 @@ const connectWebSocket = () => {
   ws.onclose = () => {
     console.log('WebSocket Disconnected')
     status.value.connected = false
-    frame.value = null
+    videoData.value = null
     fps.value = 0
-    
     reconnectTimeout = setTimeout(connectWebSocket, 3000)
   }
 
@@ -205,6 +266,7 @@ onUnmounted(() => {
 </script>
 
 <style>
+/* Previous CSS remains */
 :root {
   --bg-color: #0f172a;
   --surface-color: rgba(30, 41, 59, 0.7);
@@ -215,6 +277,7 @@ onUnmounted(() => {
   --accent-hover: #60a5fa;
   --success: #10b981;
   --danger: #ef4444;
+  --warning: #f59e0b;
 }
 
 body {
@@ -297,7 +360,6 @@ header {
   100% { opacity: 1; transform: scale(1); }
 }
 
-/* Tabs CSS */
 .tabs-nav {
   display: flex;
   background: rgba(15, 23, 42, 0.9);
@@ -337,13 +399,15 @@ header {
 
 .auth-role {
   font-size: 0.875rem;
-  color: var(--success);
   font-weight: 600;
-  background: rgba(16, 185, 129, 0.1);
   padding: 0.25rem 0.75rem;
   border-radius: 999px;
-  border: 1px solid rgba(16, 185, 129, 0.2);
+  border: 1px solid transparent;
 }
+
+.role-operator { background: rgba(59, 130, 246, 0.1); color: var(--accent-color); border-color: rgba(59, 130, 246, 0.2); }
+.role-engineer { background: rgba(16, 185, 129, 0.1); color: var(--success); border-color: rgba(16, 185, 129, 0.2); }
+.role-admin { background: rgba(245, 158, 11, 0.1); color: var(--warning); border-color: rgba(245, 158, 11, 0.2); }
 
 .tab-content {
   flex: 1;
@@ -394,9 +458,14 @@ header {
   font-family: inherit;
 }
 
-.btn:hover {
+.btn:hover:not(:disabled) {
   background: var(--accent-hover);
   transform: translateY(-2px);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .btn.secondary {
@@ -404,8 +473,22 @@ header {
   color: var(--text-primary);
 }
 
-.btn.secondary:hover {
+.btn.secondary:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.15);
+}
+
+.warning-alert {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  color: var(--warning);
+  padding: 1rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.disabled {
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 @media (max-width: 900px) {

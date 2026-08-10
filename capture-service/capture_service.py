@@ -70,7 +70,18 @@ class CameraCapture:
             "image": base64.b64encode(jpeg.tobytes()).decode("utf-8"),
             "width": frame.shape[1],
             "height": frame.shape[0],
-            "timestamp": time.time()
+            "timestamp": time.time(),
+            "overlay_telemetry": {
+                "crosshair": {"x": frame.shape[1] // 2, "y": frame.shape[0] // 2},
+                "bboxes": [
+                    {"x": 100, "y": 100, "w": 200, "h": 200, "label": "Object_A"},
+                    {"x": 400, "y": 300, "w": 150, "h": 150, "label": "Object_B"}
+                ]
+            },
+            "service_telemetry": {
+                "processing_time_ms": 12.5,
+                "capture_engine": "Hikrobot MvCameraSDK"
+            }
         }
 
     def release(self) -> None:
@@ -115,6 +126,21 @@ def main():
                 response = {"success": success}
             elif command == "disconnect":
                 success = camera.disconnect()
+                response = {"success": success}
+            elif command == "set_settings":
+                exposure = request.get("exposure")
+                gain = request.get("gain")
+                success = True
+                if exposure is not None:
+                    if camera._cam.set_exposure(exposure):
+                        camera._exposure = exposure
+                    else:
+                        success = False
+                if gain is not None:
+                    if camera._cam.set_gain(gain):
+                        camera._gain = gain
+                    else:
+                        success = False
                 response = {"success": success}
             else:
                 response = {"success": False, "error": f"Unknown command: {command}"}

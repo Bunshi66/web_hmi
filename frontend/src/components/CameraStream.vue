@@ -5,21 +5,61 @@
       <div class="fps-counter">{{ fps }} FPS</div>
     </div>
     <div class="video-wrapper">
-      <div v-if="!frame" class="no-signal">
+      <div v-if="!videoData || !videoData.frame" class="no-signal">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"></path>
         </svg>
         <span>Waiting for video stream...</span>
       </div>
-      <img v-else :src="`data:image/jpeg;base64,${frame}`" alt="Live Stream" />
+      
+      <div v-else class="stream-content">
+        <!-- The actual video frame -->
+        <img :src="`data:image/jpeg;base64,${videoData.frame}`" alt="Live Stream" />
+        
+        <!-- The SVG overlay for telemetry -->
+        <svg 
+          v-if="videoData.overlay_telemetry" 
+          class="telemetry-overlay"
+          :viewBox="`0 0 ${videoData.width || 640} ${videoData.height || 480}`"
+          preserveAspectRatio="xMidYMid meet"
+        >
+          <!-- Crosshair -->
+          <g v-if="videoData.overlay_telemetry.crosshair" class="crosshair">
+            <line 
+              :x1="videoData.overlay_telemetry.crosshair.x - 20" 
+              :y1="videoData.overlay_telemetry.crosshair.y" 
+              :x2="videoData.overlay_telemetry.crosshair.x + 20" 
+              :y2="videoData.overlay_telemetry.crosshair.y" 
+            />
+            <line 
+              :x1="videoData.overlay_telemetry.crosshair.x" 
+              :y1="videoData.overlay_telemetry.crosshair.y - 20" 
+              :x2="videoData.overlay_telemetry.crosshair.x" 
+              :y2="videoData.overlay_telemetry.crosshair.y + 20" 
+            />
+          </g>
+
+          <!-- Bounding Boxes -->
+          <g v-for="(box, i) in videoData.overlay_telemetry.bboxes" :key="i">
+            <rect 
+              :x="box.x" 
+              :y="box.y" 
+              :width="box.w" 
+              :height="box.h" 
+              class="bbox" 
+            />
+            <text :x="box.x" :y="box.y - 5" class="bbox-label">{{ box.label }}</text>
+          </g>
+        </svg>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
 defineProps({
-  frame: {
-    type: String,
+  videoData: {
+    type: Object,
     default: null
   },
   fps: {
@@ -69,6 +109,16 @@ defineProps({
   justify-content: center;
   background: #000;
   min-height: 400px;
+  overflow: hidden;
+}
+
+.stream-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 img {
@@ -76,6 +126,34 @@ img {
   max-height: 100%;
   object-fit: contain;
   transition: opacity 0.3s ease;
+}
+
+.telemetry-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none; /* Let clicks pass through if needed */
+}
+
+.crosshair line {
+  stroke: #10b981;
+  stroke-width: 2;
+  opacity: 0.8;
+}
+
+.bbox {
+  fill: none;
+  stroke: #ef4444;
+  stroke-width: 3;
+}
+
+.bbox-label {
+  fill: #ef4444;
+  font-size: 16px;
+  font-family: monospace;
+  font-weight: bold;
 }
 
 .no-signal {

@@ -96,6 +96,25 @@ class HikrobotCamera:
         print("[INFO] Grabbing stopped")
         return ret == MV_OK
 
+    def set_exposure(self, exposure_time_us: float) -> bool:
+        """Установить экспозицию (в микросекундах)"""
+        if not self._connected:
+            return False
+        ret = self._cam.MV_CC_SetFloatValue("ExposureTime", float(exposure_time_us))
+        if ret != MV_OK:
+            print(f"[ERROR] Failed to set ExposureTime: 0x{ret:08X}")
+            return False
+        return True
+
+    def set_gain(self, gain: float) -> bool:
+        """Установить усиление (Gain)"""
+        if not self._connected:
+            return False
+        ret = self._cam.MV_CC_SetFloatValue("Gain", float(gain))
+        if ret != MV_OK:
+            print(f"[ERROR] Failed to set Gain: 0x{ret:08X}")
+            return False
+        return True
     def get_frame(self, timeout_ms: int = 1000) -> np.ndarray | None:
         """Получить кадр как numpy array (BGR)."""
         if not self._grabbing:
