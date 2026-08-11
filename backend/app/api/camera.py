@@ -6,13 +6,12 @@ import datetime
 
 from app.services.camera import CameraService, CameraStatus, MockCamera, ZmqCamera
 from app.core.config import settings
+from app.core.database import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from app.models.models import SystemLog
 
 router = APIRouter(prefix="/camera", tags=["camera"])
-
-# In-memory log store
-SYSTEM_LOGS = [
-    f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO - Backend initialized"
-]
 
 @lru_cache(maxsize=1)
 def get_camera_service() -> CameraService:
@@ -26,25 +25,25 @@ async def get_status(camera: CameraService = Depends(get_camera_service)):
     return await camera.get_status()
 
 @router.post("/connect")
-async def connect_camera(request: Request, body: dict = Body(...), camera: CameraService = Depends(get_camera_service)):
+async def connect_camera(request: Request, body: dict = Body(...), camera: CameraService = Depends(get_camera_service), db: AsyncSession = Depends(get_db)):
     ip = body.get("ip", "127.0.0.1")
     success = await camera.connect(ip)
     
     client_ip = request.client.host
-    timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    SYSTEM_LOGS.append(f"[{timestamp}] INFO - [IP: {client_ip}] Attempted to connect to {ip}. Success: {success}")
-    if len(SYSTEM_LOGS) > 100: SYSTEM_LOGS.pop(0)
+    log = SystemLog(level="INFO", ip_address=client_ip, message=f"Attempted to connect to {ip}. Success: {success}")
+    db.add(log)
+    await db.commit()
     
     return {"success": success}
 
 @router.post("/disconnect")
-async def disconnect_camera(request: Request, camera: CameraService = Depends(get_camera_service)):
+async def disconnect_camera(request: Request, camera: CameraService = Depends(get_camera_service), db: AsyncSession = Depends(get_db)):
     success = await camera.disconnect()
     
     client_ip = request.client.host
-    timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    SYSTEM_LOGS.append(f"[{timestamp}] INFO - [IP: {client_ip}] Disconnected camera.")
-    if len(SYSTEM_LOGS) > 100: SYSTEM_LOGS.pop(0)
+    log = SystemLog(level="INFO", ip_address=client_ip, message="Disconnected camera.")
+    db.add(log)
+    await db.commit()
     
     return {"success": success}
 
@@ -53,14 +52,44 @@ class SettingsRequest(BaseModel):
     gain: float = None
 
 @router.post("/settings")
-async def apply_settings(request: Request, body: SettingsRequest, camera: CameraService = Depends(get_camera_service)):
+async def apply_settings(request: Request, body: SettingsRequest, camera: CameraService = Depends(get_camera_service), db: AsyncSession = Depends(get_db)):
     success = await camera.set_settings(exposure=body.exposure, gain=body.gain)
     
     client_ip = request.client.host
-    timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    SYSTEM_LOGS.append(f"[{timestamp}] INFO - [IP: {client_ip}] Changed settings (Exposure: {body.exposure}, Gain: {body.gain}). Success: {success}")
-    if len(SYSTEM_LOGS) > 100: SYSTEM_LOGS.pop(0)
+    log = SystemLog(level="INFO", ip_address=client_ip, message=f"Changed settings (Exposure: {body.exposure}, Gain: {body.gain}). Success: {success}")
+    db.add(log)
+    await db.commit()
         
+    return {"success": success}
+
+class IOConfigureRequest(BaseModel):
+    line_name: str
+    output_name: str
+
+@router.post("/io/configure")
+async def configure_io(request: Request, body: IOConfigureRequest, camera: CameraService = Depends(get_camera_service), db: AsyncSession = Depends(get_db)):
+    success = await camera.configure_io(line_name=body.line_name, output_name=body.output_name)
+    
+    client_ip = request.client.host
+    log = SystemLog(level="INFO", ip_address=client_ip, message=f"Configured IO {body.line_name} as {body.output_name}. Success: {success}")
+    db.add(log)
+    await db.commit()
+    
+    return {"success": success}
+
+class IOSetRequest(BaseModel):
+    state: bool
+    output_name: str
+
+@router.post("/io/set")
+async def set_io(request: Request, body: IOSetRequest, camera: CameraService = Depends(get_camera_service), db: AsyncSession = Depends(get_db)):
+    success = await camera.set_io(state=body.state, output_name=body.output_name)
+    
+    client_ip = request.client.host
+    log = SystemLog(level="INFO", ip_address=client_ip, message=f"Set IO {body.output_name} to {body.state}. Success: {success}")
+    db.add(log)
+    await db.commit()
+    
     return {"success": success}
 
 @router.get("/stream")
@@ -74,14 +103,158 @@ class LogMessage(BaseModel):
     message: str
 
 @router.post("/log")
-async def add_log(request: Request, log_msg: LogMessage):
+async def add_log(request: Request, log_msg: LogMessage, db: AsyncSession = Depends(get_db)):
     client_ip = request.client.host
-    timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    log_entry = f"[{timestamp}] INFO - [IP: {client_ip}] {log_msg.message}"
-    SYSTEM_LOGS.append(log_entry)
-    if len(SYSTEM_LOGS) > 100: SYSTEM_LOGS.pop(0)
+    log = SystemLog(level="INFO", ip_address=client_ip, message=log_msg.message)
+    db.add(log)
+    await db.commit()
     return {"success": True}
 
 @router.get("/logs")
-async def get_logs():
-    return {"logs": SYSTEM_LOGS}
+async def get_logs(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(SystemLog).order_by(SystemLog.timestamp.desc()).limit(100))
+    logs = result.scalars().all()
+    formatted_logs = [f"[{log.timestamp.strftime('%Y-%m-%d %H:%M:%S')}] {log.level} - [IP: {log.ip_address}] {log.message}" for log in logs]
+    return {"logs": formatted_logs[::-1]}
+
+from app.models.models import Defect
+from sqlalchemy import desc
+
+@router.get("/defects")
+async def get_defects(limit: int = 10, offset: int = 0, time_range: str = "all", db: AsyncSession = Depends(get_db)):
+    query = select(Defect)
+    
+    if time_range != "all":
+        now = datetime.datetime.now(datetime.timezone.utc)
+        if time_range == "shift":
+            start_time = now - datetime.timedelta(hours=8)
+        elif time_range == "day":
+            start_time = now - datetime.timedelta(days=1)
+        elif time_range == "week":
+            start_time = now - datetime.timedelta(days=7)
+        else:
+            start_time = now
+            
+        query = query.where(Defect.timestamp >= start_time)
+        
+    result = await db.execute(
+        query.order_by(desc(Defect.timestamp)).limit(limit).offset(offset)
+    )
+    defects = result.scalars().all()
+    
+    # Count total with same filter
+    count_query = select(func.count()).select_from(Defect)
+    if time_range != "all":
+        count_query = count_query.where(Defect.timestamp >= start_time)
+        
+    total_result = await db.execute(count_query)
+    total = total_result.scalar()
+    
+    return {
+        "items": [
+            {
+                "id": d.id,
+                "timestamp": d.timestamp.isoformat(),
+                "defect_type": d.defect_type,
+                "confidence": d.confidence,
+                "bbox_data": d.bbox_data,
+                "image_url": f"/data/defects/{d.image_path}"
+            } for d in defects
+        ],
+        "total": total
+    }
+
+from sqlalchemy import delete
+import os
+
+@router.delete("/defects")
+async def clear_defects(db: AsyncSession = Depends(get_db)):
+    try:
+        # Delete all records from database
+        await db.execute(delete(Defect))
+        await db.commit()
+        
+        # Clear the images directory
+        defects_dir = "/app/data/defects"
+        if os.path.exists(defects_dir):
+            for filename in os.listdir(defects_dir):
+                file_path = os.path.join(defects_dir, filename)
+                try:
+                    if os.path.isfile(file_path):
+                        os.unlink(file_path)
+                except Exception as e:
+                    print(f"Error deleting file {file_path}: {e}")
+                    
+        return {"success": True, "message": "Archive cleared successfully"}
+    except Exception as e:
+        await db.rollback()
+        return {"success": False, "error": str(e)}
+
+import zipfile
+from io import BytesIO
+from fastapi.responses import StreamingResponse
+from app.models.models import ConnectionSettings
+from pydantic import BaseModel
+from sqlalchemy import select
+
+@router.get("/defects/export")
+async def export_defects(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Defect))
+    defects = result.scalars().all()
+    
+    # Create an in-memory zip file
+    zip_buffer = BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        # Create CSV manifest
+        csv_lines = ["id,timestamp,defect_type,confidence,image_path"]
+        for d in defects:
+            csv_lines.append(f"{d.id},{d.timestamp.isoformat()},{d.defect_type},{d.confidence},{d.image_path}")
+            
+            # Add image to zip if it exists
+            img_path = f"/app/data/defects/{d.image_path}"
+            if os.path.exists(img_path):
+                zip_file.write(img_path, arcname=f"images/{d.image_path}")
+                
+        # Add manifest to zip
+        zip_file.writestr("manifest.csv", "\n".join(csv_lines))
+        
+    zip_buffer.seek(0)
+    return StreamingResponse(
+        zip_buffer, 
+        media_type="application/zip", 
+        headers={"Content-Disposition": "attachment; filename=defects_archive.zip"}
+    )
+
+class ConnectionSettingsUpdate(BaseModel):
+    target_ip: str
+    auto_reconnect: bool
+    reconnect_interval: int
+
+@router.get("/settings/connection")
+async def get_connection_settings(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(ConnectionSettings).limit(1))
+    settings = result.scalars().first()
+    if not settings:
+        settings = ConnectionSettings()
+        db.add(settings)
+        await db.commit()
+        await db.refresh(settings)
+    return {
+        "target_ip": settings.target_ip,
+        "auto_reconnect": bool(settings.auto_reconnect),
+        "reconnect_interval": settings.reconnect_interval
+    }
+
+@router.post("/settings/connection")
+async def update_connection_settings(data: ConnectionSettingsUpdate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(ConnectionSettings).limit(1))
+    settings = result.scalars().first()
+    if not settings:
+        settings = ConnectionSettings()
+        db.add(settings)
+        
+    settings.target_ip = data.target_ip
+    settings.auto_reconnect = 1 if data.auto_reconnect else 0
+    settings.reconnect_interval = data.reconnect_interval
+    await db.commit()
+    return {"success": True}

@@ -22,6 +22,22 @@ async def get_db():
     async with async_session() as session:
         yield session
 
+import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
+
 async def init_db():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    retries = 5
+    while retries > 0:
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            logger.info("Database connected and initialized.")
+            break
+        except Exception as e:
+            retries -= 1
+            logger.error(f"Database connection failed. Retrying... {retries} attempts left. Error: {e}")
+            if retries == 0:
+                raise
+            await asyncio.sleep(3)

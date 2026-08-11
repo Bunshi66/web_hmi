@@ -2,10 +2,22 @@
   <div class="video-container">
     <div class="video-header">
       <div class="video-title">Live Camera Stream</div>
-      <div class="fps-counter">{{ fps }} FPS</div>
+      <div style="display: flex; gap: 1rem; align-items: center;">
+        <button 
+          class="focus-btn" 
+          :class="{ active: showTelemetry }" 
+          @click="showTelemetry = !showTelemetry"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 20v-8m0 0V4m0 8h8m-8 0H4"></path>
+          </svg>
+          Telemetry
+        </button>
+        <div class="fps-counter">{{ fps }} FPS</div>
+      </div>
     </div>
     <div class="video-wrapper">
-      <div v-if="!videoData || !videoData.frame" class="no-signal">
+      <div v-if="!videoData || (!videoData.frame && !videoData.url)" class="no-signal">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"></path>
         </svg>
@@ -14,11 +26,12 @@
       
       <div v-else class="stream-content">
         <!-- The actual video frame -->
-        <img :src="`data:image/jpeg;base64,${videoData.frame}`" alt="Live Stream" />
+        <img v-if="videoData.url" :src="videoData.url" alt="Camera Stream" />
+        <img v-else :src="`data:image/jpeg;base64,${videoData.frame}`" alt="Live Stream" />
         
         <!-- The SVG overlay for telemetry -->
         <svg 
-          v-if="videoData.overlay_telemetry" 
+          v-if="videoData.overlay_telemetry && showTelemetry" 
           class="telemetry-overlay"
           :viewBox="`0 0 ${videoData.width || 640} ${videoData.height || 480}`"
           preserveAspectRatio="xMidYMid meet"
@@ -67,6 +80,9 @@ defineProps({
     default: 0
   }
 })
+
+import { ref } from 'vue'
+const showTelemetry = ref(true)
 </script>
 
 <style scoped>
@@ -125,7 +141,31 @@ img {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
-  transition: opacity 0.3s ease;
+}
+
+.focus-btn {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--surface-border);
+  padding: 0.25rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.focus-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.focus-btn.active {
+  background: rgba(16, 185, 129, 0.2);
+  color: var(--success);
+  border-color: var(--success);
 }
 
 .telemetry-overlay {

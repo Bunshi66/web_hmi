@@ -10,3 +10,4 @@ sqlalchemy
 aiosqlite
 aiofiles
 websockets
+asyncpg

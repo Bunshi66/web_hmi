@@ -10,6 +10,10 @@ export default defineConfig({
         target: 'http://backend:8000',
         changeOrigin: true,
         ws: true
+      },
+      '/data': {
+        target: 'http://backend:8000',
+        changeOrigin: true
       }
     }
   }

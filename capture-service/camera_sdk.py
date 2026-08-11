@@ -15,6 +15,7 @@ from MvImport.CameraParams_header import (
     MV_CC_DEVICE_INFO,
     MV_FRAME_OUT,
     MV_FRAME_OUT_INFO_EX,
+    MVCC_FLOATVALUE,
 )
 from MvImport.MvErrorDefine_const import MV_OK
 from MvImport.PixelType_header import PixelType_Gvsp_BGR8_Packed
@@ -32,9 +33,18 @@ class HikrobotCamera:
         self._connected = False
         self._grabbing = False
 
+    def is_alive(self) -> bool:
+        """Проверить физическое подключение камеры."""
+        if getattr(self, '_cam', None) and hasattr(self._cam, 'MV_CC_IsDeviceConnected'):
+            try:
+                return self._cam.MV_CC_IsDeviceConnected()
+            except Exception:
+                return False
+        return self._connected
+
     def connect(self, ip: str = None) -> bool:
         """Найти камеру и подключиться."""
-        if self._connected:
+        if self._connected and self.is_alive():
             print("[INFO] Already connected.")
             return True
         try:
@@ -122,6 +132,107 @@ class HikrobotCamera:
             print(f"[ERROR] Failed to set Gain: 0x{ret:08X}")
             return False
         return True
+
+    def get_temperature(self) -> float:
+        """Получить температуру камеры (с перебором вариантов)."""
+        if not self._connected:
+            return 0.0
+
+        if not hasattr(self, '_debug_temp_count'):
+            self._debug_temp_count = 0
+            
+        stFloatValue = MVCC_FLOATVALUE()
+        should_print = self._debug_temp_count < 2
+        if should_print:
+            print("[DEBUG] Attempting to read temperature...")
+
+        # Вариант 1: Стандартный DeviceTemperature (как Float)
+        ret1 = self._cam.MV_CC_GetFloatValue("DeviceTemperature", stFloatValue)
+        if ret1 == MV_OK:
+            return stFloatValue.fCurValue
+        elif should_print:
+            print(f"[DEBUG] Variant 1 (DeviceTemperature) failed. ret = 0x{ret1:08X}")
+
+        # Вариант 2: Возможно, нужно сначала выбрать сенсор через Selector
+        ret_sel = self._cam.MV_CC_SetEnumValueByString("DeviceTemperatureSelector", "Sensor")
+        if ret_sel == MV_OK:
+            ret2 = self._cam.MV_CC_GetFloatValue("DeviceTemperature", stFloatValue)
+            if ret2 == MV_OK:
+                return stFloatValue.fCurValue
+            elif should_print:
+                print(f"[DEBUG] Variant 2 (Selector=Sensor -> DeviceTemperature) failed. ret = 0x{ret2:08X}")
+        elif should_print:
+            print(f"[DEBUG] Variant 2 (Set DeviceTemperatureSelector) failed. ret = 0x{ret_sel:08X}")
+
+        # Вариант 3: На старых моделях это узел "Temperature" (как Float)
+        ret3 = self._cam.MV_CC_GetFloatValue("Temperature", stFloatValue)
+        if ret3 == MV_OK:
+            return stFloatValue.fCurValue
+        elif should_print:
+            print(f"[DEBUG] Variant 3 (Temperature) failed. ret = 0x{ret3:08X}")
+
+        if should_print:
+            self._debug_temp_count += 1
+            print("[DEBUG] All temperature variants failed. Returning 0.0")
+
+        return 0.0
+
+
+    def trigger_defect(self) -> bool:
+        """Аппаратный триггер: Line 1, Software"""
+        if not self._connected:
+            return False
+        
+        # Try to use standard UserOutput for generic GPIO if LineTriggerSoftware fails
+        try:
+            self._cam.MV_CC_SetEnumValueByString("LineSelector", "Line1")
+            self._cam.MV_CC_SetEnumValueByString("LineMode", "Strobe")
+        except:
+            pass # Ignore if not supported
+
+        ret = self._cam.MV_CC_SetCommandValue("LineTriggerSoftware")
+        if ret != MV_OK:
+            # Fallback for cameras that don't support LineTriggerSoftware
+            ret2 = self._cam.MV_CC_SetCommandValue("TriggerSoftware")
+            if ret2 != MV_OK:
+                print(f"[WARN] Trigger defect might not be supported. Error codes: 0x{ret:08X}, 0x{ret2:08X}")
+                return False
+                
+        print("[INFO] Defect triggered via GPIO")
+        return True
+
+    def configure_io_output(self, line_name: str = "Line2", output_name: str = "UserOutput1") -> bool:
+        """Настраивает физическую линию (IO) камеры как программно управляемый выход."""
+        if not self._connected:
+            return False
+            
+        try:
+            self._cam.MV_CC_SetEnumValueByString("LineSelector", line_name)
+            self._cam.MV_CC_SetEnumValueByString("LineMode", "Strobe") 
+            self._cam.MV_CC_SetEnumValueByString("LineSource", output_name)
+            return True
+        except Exception as e:
+            print(f"[ERROR] Failed to configure IO output: {e}")
+            return False
+
+    def set_io_value(self, state: bool, output_name: str = "UserOutput1") -> bool:
+        """Устанавливает логическое состояние (Вкл/Выкл) на настроенном выходе."""
+        if not self._connected:
+            return False
+            
+        ret_sel = self._cam.MV_CC_SetEnumValueByString("UserOutputSelector", output_name)
+        if ret_sel != MV_OK:
+            print(f"[ERROR] Failed to select {output_name}: 0x{ret_sel:08X}")
+            return False
+            
+        ret_val = self._cam.MV_CC_SetBoolValue("UserOutputValue", state)
+        if ret_val != MV_OK:
+            print(f"[ERROR] Failed to set UserOutputValue to {state}: 0x{ret_val:08X}")
+            return False
+            
+        print(f"[INFO] Set {output_name} to {state}")
+        return True
+
     def get_frame(self, timeout_ms: int = 1000) -> np.ndarray | None:
         """Получить кадр как numpy array (BGR)."""
         if not self._grabbing:

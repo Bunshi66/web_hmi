@@ -27,9 +27,19 @@
       >Settings</button>
       <button 
         class="tab-btn" 
+        :class="{ active: activeTab === 'control' }" 
+        @click="activeTab = 'control'"
+      >Control</button>
+      <button 
+        class="tab-btn" 
         :class="{ active: activeTab === 'logs' }" 
         @click="loadLogs"
       >Logs</button>
+      <button 
+        class="tab-btn" 
+        :class="{ active: activeTab === 'archive' }" 
+        @click="activeTab = 'archive'"
+      >Archive</button>
       
       <div class="auth-panel">
         <span class="auth-role" :class="roleClass">Role: {{ userRole }}</span>
@@ -48,10 +58,10 @@
     </div>
 
     <!-- SETTINGS TAB -->
-    <div v-show="activeTab === 'settings'" class="tab-content">
-      <div class="card" style="flex: 1;">
-        <h3>Camera Settings</h3>
-        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Configure Hikrobot camera parameters here.</p>
+    <div v-show="activeTab === 'settings'" class="tab-content" style="display: flex; gap: 1rem; flex-wrap: wrap;">
+      <div class="card" style="flex: 1; min-width: 300px;">
+        <h3>Camera Image Settings</h3>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Configure Hikrobot camera exposure and gain.</p>
         
         <div v-if="userRole === 'Operator'" class="warning-alert">
           <strong>Access Denied:</strong> Operators cannot modify camera settings. Please login as Engineer or Admin.
@@ -66,9 +76,39 @@
             <span style="color: var(--text-primary);">Gain</span>
             <input type="number" v-model.number="settingsForm.gain" step="0.1" :disabled="userRole === 'Operator'" style="background: rgba(0,0,0,0.2); border: 1px solid var(--surface-border); color: white; padding: 0.5rem; border-radius: 4px; width: 100px;">
           </div>
-          <button class="btn" style="margin-top: 1rem;" :disabled="userRole === 'Operator'" @click="applySettings">Apply Settings</button>
+          <button class="btn" style="margin-top: 1rem;" :disabled="userRole === 'Operator'" @click="applySettings">Apply Image Settings</button>
         </div>
       </div>
+
+      <div class="card" style="flex: 1; min-width: 300px;">
+        <h3>Connection Settings</h3>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Configure auto-reconnect and target IP.</p>
+
+        <div v-if="userRole === 'Operator'" class="warning-alert">
+          <strong>Access Denied:</strong> Operators cannot modify connection settings.
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 1rem; max-width: 400px; margin-top: 1rem;" :class="{ disabled: userRole === 'Operator' }">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: var(--text-primary);">Target Camera IP</span>
+            <input type="text" v-model="connectionForm.target_ip" :disabled="userRole === 'Operator'" style="background: rgba(0,0,0,0.2); border: 1px solid var(--surface-border); color: white; padding: 0.5rem; border-radius: 4px; width: 150px;">
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: var(--text-primary);">Auto-Reconnect</span>
+            <input type="checkbox" v-model="connectionForm.auto_reconnect" :disabled="userRole === 'Operator'" style="width: 20px; height: 20px;">
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: var(--text-primary);">Interval (sec)</span>
+            <input type="number" v-model.number="connectionForm.reconnect_interval" :disabled="userRole === 'Operator'" style="background: rgba(0,0,0,0.2); border: 1px solid var(--surface-border); color: white; padding: 0.5rem; border-radius: 4px; width: 100px;">
+          </div>
+          <button class="btn" style="margin-top: 1rem;" :disabled="userRole === 'Operator'" @click="applyConnectionSettings">Save Connection Settings</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTROL TAB -->
+    <div v-show="activeTab === 'control'" class="tab-content">
+      <ControlPanel :userRole="userRole" />
     </div>
 
     <!-- LOGS TAB -->
@@ -91,16 +131,32 @@
       </div>
     </div>
 
+    <!-- ARCHIVE TAB -->
+    <div v-show="activeTab === 'archive'" class="tab-content">
+      <Archive />
+    </div>
+
     <LoginModal :show="showAuth" @close="showAuth = false" @role-selected="handleRoleChange" />
+
+    <!-- Connection Lost Modal -->
+    <div v-if="showConnectionLost" class="modal-overlay" @click="showConnectionLost = false">
+      <div class="modal-content" @click.stop style="max-width: 400px; text-align: center; padding: 2rem; border-top: 4px solid #ef4444;">
+        <h3 style="margin-top: 0; color: #ef4444;">Connection Lost</h3>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">The connection to the camera has been lost. If auto-reconnect is enabled, the system will attempt to restore it automatically.</p>
+        <button class="btn" style="width: 100%; background-color: #ef4444; border-color: #ef4444;" @click="showConnectionLost = false">Dismiss</button>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import CameraStream from './components/CameraStream.vue'
 import Controls from './components/Controls.vue'
 import TelemetryPanel from './components/TelemetryPanel.vue'
 import LoginModal from './components/LoginModal.vue'
+import Archive from './components/Archive.vue'
+import ControlPanel from './components/ControlPanel.vue'
 
 const activeTab = ref('stream')
 const showAuth = ref(false)
@@ -120,6 +176,20 @@ const status = ref({
 const settingsForm = ref({
   exposure: 5000,
   gain: 1.0
+})
+
+const connectionForm = ref({
+  target_ip: '192.168.1.64',
+  auto_reconnect: true,
+  reconnect_interval: 5
+})
+
+const showConnectionLost = ref(false)
+
+watch(() => status.value.connected, (newVal, oldVal) => {
+  if (oldVal === true && newVal === false) {
+    showConnectionLost.value = true
+  }
 })
 
 const systemLogs = ref([])
@@ -189,6 +259,34 @@ const applySettings = async () => {
   }
 }
 
+const loadConnectionSettings = async () => {
+  try {
+    const res = await fetch('/camera/settings/connection')
+    const data = await res.json()
+    connectionForm.value = data
+  } catch (e) {
+    console.error("Failed to load connection settings", e)
+  }
+}
+
+const applyConnectionSettings = async () => {
+  try {
+    const res = await fetch('/camera/settings/connection', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(connectionForm.value)
+    })
+    const data = await res.json()
+    if (data.success) {
+      alert('Connection settings applied successfully')
+    } else {
+      alert('Failed to apply connection settings')
+    }
+  } catch (e) {
+    console.error("Error applying connection settings", e)
+  }
+}
+
 const connectWebSocket = () => {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${protocol}//${window.location.host}/camera/ws`
@@ -202,25 +300,47 @@ const connectWebSocket = () => {
     ws.send(JSON.stringify({ action: "subscribe", types: ["video", "telemetry"] }))
   }
 
-  ws.onmessage = (event) => {
+  ws.onmessage = async (event) => {
     try {
-      const data = JSON.parse(event.data)
-      
-      if (data.action === "video" && data.frame) {
-        videoData.value = data
-        serviceTelemetryData.value = data.service_telemetry
-        framesReceived++
+      if (event.data instanceof Blob) {
+        const arrayBuffer = await event.data.arrayBuffer()
+        const dataView = new DataView(arrayBuffer)
+        const metaLen = dataView.getUint32(0, true) // little endian
         
-        const now = Date.now()
-        if (now - lastFpsTime >= 1000) {
-          fps.value = framesReceived
-          framesReceived = 0
-          lastFpsTime = now
+        const metaBytes = new Uint8Array(arrayBuffer, 4, metaLen)
+        const metaStr = new TextDecoder().decode(metaBytes)
+        const data = JSON.parse(metaStr)
+        
+        const imgBytes = new Uint8Array(arrayBuffer, 4 + metaLen)
+        const blob = new Blob([imgBytes], { type: 'image/jpeg' })
+        const url = URL.createObjectURL(blob)
+        
+        if (data.action === "video") {
+          // Release old URL to avoid memory leak
+          if (videoData.value && videoData.value.url) {
+            URL.revokeObjectURL(videoData.value.url)
+          }
+          data.url = url
+          
+          videoData.value = data
+          serviceTelemetryData.value = data.service_telemetry
+          if (data.camera_temp !== undefined) {
+            status.value.temperature = data.camera_temp
+          }
+          framesReceived++
+          
+          const now = Date.now()
+          if (now - lastFpsTime >= 1000) {
+            fps.value = framesReceived
+            framesReceived = 0
+            lastFpsTime = now
+          }
         }
-      } 
-      else if (data.action === "telemetry" && data.status) {
-        status.value = { ...status.value, ...data.status }
-        // Removed updating settingsForm from telemetry to prevent input overwrite
+      } else {
+        const data = JSON.parse(event.data)
+        if (data.action === "telemetry" && data.status) {
+          status.value = { ...status.value, ...data.status }
+        }
       }
     } catch (e) {
       console.error("Error parsing message", e)
@@ -265,6 +385,7 @@ const handleDisconnect = async () => {
 
 onMounted(() => {
   connectWebSocket()
+  loadConnectionSettings()
 })
 
 onUnmounted(() => {

@@ -15,7 +15,6 @@ class CameraCapture:
         self._connected = False
         self._ip = None
         self._fps = 30.0
-        self._temperature = 42.0
         self._exposure = 5000
         self._gain = 1.0
 
@@ -49,42 +48,46 @@ class CameraCapture:
             return False
 
     def get_status(self) -> dict:
+        if self._connected:
+            if not self._cam.is_alive():
+                print("[WARNING] Physical connection lost. Disconnecting...")
+                self.disconnect()
+
         return {
             "connected": self._connected,
             "ip": self._ip if self._connected else None,
             "fps": self._fps if self._connected else 0.0,
-            "temperature": self._temperature if self._connected else None,
+            "temperature": self._cam.get_temperature() if self._connected else 0.0,
             "exposure": self._exposure,
             "gain": self._gain
         }
 
-    def grab_frame(self) -> dict:
+    def grab_frame(self) -> tuple[dict | None, bytes | None]:
         if not self._connected:
-            return {"image": None, "width": 0, "height": 0, "timestamp": 0}
+            return None, None
 
         frame = self._cam.get_frame(timeout_ms=1000)
         if frame is None:
-            return {"image": None, "width": 0, "height": 0, "timestamp": time.time()}
+            return None, None
 
-        # BGR → JPEG → base64
+        # BGR → JPEG
         _, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-        return {
-            "image": base64.b64encode(jpeg.tobytes()).decode("utf-8"),
+        
+        metadata = {
             "width": frame.shape[1],
             "height": frame.shape[0],
             "timestamp": time.time(),
+            "camera_temp": self._cam.get_temperature(),
             "overlay_telemetry": {
                 "crosshair": {"x": frame.shape[1] // 2, "y": frame.shape[0] // 2},
-                "bboxes": [
-                    {"x": 100, "y": 100, "w": 200, "h": 200, "label": "Object_A"},
-                    {"x": 400, "y": 300, "w": 150, "h": 150, "label": "Object_B"}
-                ]
+                "bboxes": []
             },
             "service_telemetry": {
                 "processing_time_ms": 12.5,
                 "capture_engine": "Hikrobot MvCameraSDK"
             }
         }
+        return metadata, jpeg.tobytes()
 
     def release(self) -> None:
         self.disconnect()
@@ -104,11 +107,13 @@ def main():
     logger.info("Stream socket on tcp://*:5556")
 
     def stream_loop():
-        """Фоновый поток: шлёт кадры в PUB сокет"""
+        """Фоновый поток: шлёт кадры в PUB сокет Multipart"""
         while True:
             if camera._connected:
-                frame = camera.grab_frame()
-                pub_socket.send_json(frame)
+                meta, jpeg = camera.grab_frame()
+                if meta and jpeg:
+                    pub_socket.send_json(meta, flags=zmq.SNDMORE)
+                    pub_socket.send(jpeg)
             time.sleep(0.033)
 
     thread = threading.Thread(target=stream_loop, daemon=True)
@@ -137,12 +142,16 @@ def main():
                     if camera._cam.set_exposure(exposure):
                         camera._exposure = exposure
                     else:
+                        
                         success = False
                 if gain is not None:
                     if camera._cam.set_gain(gain):
                         camera._gain = gain
                     else:
                         success = False
+                response = {"success": success}
+            elif command == "trigger_defect":
+                success = camera._cam.trigger_defect()
                 response = {"success": success}
             else:
                 response = {"success": False, "error": f"Unknown command: {command}"}
