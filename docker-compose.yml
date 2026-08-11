@@ -10,9 +10,8 @@ services:
     environment:
       # Для тестирования используем захват вебкамеры из Windows по ZMQ
       - CAMERA_MODE=zmq
-      # Когда запустишь capture-service на Windows, поменяй CAMERA_MODE=zmq
-      # host.docker.internal позволяет из Docker (WSL) достучаться до хостовой Windows
-      - ZMQ_CAMERA_ADDRESS=tcp://host.docker.internal:5555
+      # host.docker.internal может не работать в чистом WSL без Docker Desktop
+      - ZMQ_CAMERA_ADDRESS=tcp://192.168.30.201:5555
       - DATABASE_URL=postgresql+asyncpg://admin:admin@db:5432/webhmi
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
