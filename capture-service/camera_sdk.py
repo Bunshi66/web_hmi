@@ -125,14 +125,33 @@ class HikrobotCamera:
         return True
 
     def get_temperature(self) -> float:
-        """Получить температуру камеры."""
+        """Получить температуру камеры (с перебором вариантов)."""
         if not self._connected:
             return 0.0
+
         stFloatValue = MVCC_FLOATVALUE()
+
+        # Вариант 1: Стандартный DeviceTemperature (как Float)
         ret = self._cam.MV_CC_GetFloatValue("DeviceTemperature", stFloatValue)
         if ret == MV_OK:
             return stFloatValue.fCurValue
+
+        # Вариант 2: Возможно, нужно сначала выбрать сенсор через Selector
+        ret_sel = self._cam.MV_CC_SetEnumValueByString("DeviceTemperatureSelector", "Sensor")
+        if ret_sel == MV_OK:
+            ret = self._cam.MV_CC_GetFloatValue("DeviceTemperature", stFloatValue)
+            if ret == MV_OK:
+                return stFloatValue.fCurValue
+
+        # Вариант 3: На старых моделях это узел "Temperature" (как Float)
+        ret = self._cam.MV_CC_GetFloatValue("Temperature", stFloatValue)
+        if ret == MV_OK:
+            return stFloatValue.fCurValue
+
+        # Если ничего не помогло — чтобы не спамить в логи каждые 33 мс, 
+        # возвращаем 0.0 молча.
         return 0.0
+
 
     def trigger_defect(self) -> bool:
         """Аппаратный триггер: Line 1, Software"""
