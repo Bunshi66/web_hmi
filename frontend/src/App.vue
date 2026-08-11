@@ -55,7 +55,7 @@
     <!-- STREAM TAB -->
     <div v-show="activeTab === 'stream'" class="tab-content">
       <div style="flex: 2; display: flex; flex-direction: column; gap: 1rem;">
-        <CameraStream :videoData="latestFrame" :fps="currentFps" />
+        <CameraStream :videoData="videoData" :fps="fps" />
         <div style="display: flex; justify-content: flex-end;">
           <button class="btn danger" style="background-color: #ef4444; border-color: #ef4444; color: white;" @click="saveManualDefect">Save Frame to Archive</button>
         </div>
