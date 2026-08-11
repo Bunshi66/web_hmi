@@ -129,27 +129,43 @@ class HikrobotCamera:
         if not self._connected:
             return 0.0
 
+        if not hasattr(self, '_debug_temp_count'):
+            self._debug_temp_count = 0
+            
         stFloatValue = MVCC_FLOATVALUE()
+        should_print = self._debug_temp_count < 2
+        if should_print:
+            print("[DEBUG] Attempting to read temperature...")
 
         # Вариант 1: Стандартный DeviceTemperature (как Float)
-        ret = self._cam.MV_CC_GetFloatValue("DeviceTemperature", stFloatValue)
-        if ret == MV_OK:
+        ret1 = self._cam.MV_CC_GetFloatValue("DeviceTemperature", stFloatValue)
+        if ret1 == MV_OK:
             return stFloatValue.fCurValue
+        elif should_print:
+            print(f"[DEBUG] Variant 1 (DeviceTemperature) failed. ret = 0x{ret1:08X}")
 
         # Вариант 2: Возможно, нужно сначала выбрать сенсор через Selector
         ret_sel = self._cam.MV_CC_SetEnumValueByString("DeviceTemperatureSelector", "Sensor")
         if ret_sel == MV_OK:
-            ret = self._cam.MV_CC_GetFloatValue("DeviceTemperature", stFloatValue)
-            if ret == MV_OK:
+            ret2 = self._cam.MV_CC_GetFloatValue("DeviceTemperature", stFloatValue)
+            if ret2 == MV_OK:
                 return stFloatValue.fCurValue
+            elif should_print:
+                print(f"[DEBUG] Variant 2 (Selector=Sensor -> DeviceTemperature) failed. ret = 0x{ret2:08X}")
+        elif should_print:
+            print(f"[DEBUG] Variant 2 (Set DeviceTemperatureSelector) failed. ret = 0x{ret_sel:08X}")
 
         # Вариант 3: На старых моделях это узел "Temperature" (как Float)
-        ret = self._cam.MV_CC_GetFloatValue("Temperature", stFloatValue)
-        if ret == MV_OK:
+        ret3 = self._cam.MV_CC_GetFloatValue("Temperature", stFloatValue)
+        if ret3 == MV_OK:
             return stFloatValue.fCurValue
+        elif should_print:
+            print(f"[DEBUG] Variant 3 (Temperature) failed. ret = 0x{ret3:08X}")
 
-        # Если ничего не помогло — чтобы не спамить в логи каждые 33 мс, 
-        # возвращаем 0.0 молча.
+        if should_print:
+            self._debug_temp_count += 1
+            print("[DEBUG] All temperature variants failed. Returning 0.0")
+
         return 0.0
 
 
