@@ -248,7 +248,7 @@ const connectWebSocket = () => {
           
           videoData.value = data
           serviceTelemetryData.value = data.service_telemetry
-          if (data.camera_temp !== undefined && data.camera_temp !== 0.0) {
+          if (data.camera_temp !== undefined) {
             status.value.temperature = data.camera_temp
           }
           framesReceived++

@@ -15,7 +15,6 @@ class CameraCapture:
         self._connected = False
         self._ip = None
         self._fps = 30.0
-        self._temperature = 42.0
         self._exposure = 5000
         self._gain = 1.0
 
@@ -53,7 +52,7 @@ class CameraCapture:
             "connected": self._connected,
             "ip": self._ip if self._connected else None,
             "fps": self._fps if self._connected else 0.0,
-            "temperature": self._temperature if self._connected else None,
+            "temperature": self._cam.get_temperature() if self._connected else 0.0,
             "exposure": self._exposure,
             "gain": self._gain
         }
