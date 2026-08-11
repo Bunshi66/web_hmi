@@ -54,6 +54,16 @@ async def connection_watchdog():
 async def startup_event():
     global ml_worker, retention_worker, watchdog_task
     await init_db()
+    
+    # Simple migration for max_det column
+    from sqlalchemy import text
+    try:
+        async with async_session() as session:
+            await session.execute(text("ALTER TABLE app_settings ADD COLUMN max_det INTEGER DEFAULT 100"))
+            await session.commit()
+    except Exception:
+        pass
+        
     ml_worker = YoloWorker(get_camera_service())
     await ml_worker.start()
     

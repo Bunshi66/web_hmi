@@ -296,7 +296,7 @@ const loadLogs = async () => {
 
 const saveManualDefect = async () => {
   try {
-    const response = await fetch('/api/camera/manual-defect', { method: 'POST' })
+    const response = await fetch('/camera/manual-defect', { method: 'POST' })
     if (response.ok) {
       alert('Save frame requested successfully!')
     } else {
