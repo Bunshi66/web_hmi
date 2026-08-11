@@ -57,6 +57,16 @@ class CameraService(ABC):
         """Отправить аппаратный триггер дефекта"""
         ...
 
+    @abstractmethod
+    async def configure_io(self, line_name: str, output_name: str) -> bool:
+        """Настроить IO вывод"""
+        ...
+
+    @abstractmethod
+    async def set_io(self, state: bool, output_name: str) -> bool:
+        """Включить/выключить IO вывод"""
+        ...
+
 class MockCamera(CameraService):
     """Заглушка для тестов и демо — не требует реальной камеры"""
 
@@ -91,6 +101,14 @@ class MockCamera(CameraService):
 
     async def trigger_defect(self) -> bool:
         print("[MOCK] Defect triggered!")
+        return True
+
+    async def configure_io(self, line_name: str, output_name: str) -> bool:
+        print(f"[MOCK] Configured IO: {line_name} as {output_name}")
+        return True
+
+    async def set_io(self, state: bool, output_name: str) -> bool:
+        print(f"[MOCK] Set IO {output_name} to {state}")
         return True
 
     async def stream_raw(self) -> AsyncGenerator[dict, None]:
@@ -190,6 +208,20 @@ class ZmqCamera(CameraService):
     async def trigger_defect(self) -> bool:
         try:
             response = await self._send_command("trigger_defect")
+            return response.get("success", False)
+        except zmq.Again:
+            return False
+
+    async def configure_io(self, line_name: str, output_name: str) -> bool:
+        try:
+            response = await self._send_command("configure_io", line_name=line_name, output_name=output_name)
+            return response.get("success", False)
+        except zmq.Again:
+            return False
+
+    async def set_io(self, state: bool, output_name: str) -> bool:
+        try:
+            response = await self._send_command("set_io", state=state, output_name=output_name)
             return response.get("success", False)
         except zmq.Again:
             return False

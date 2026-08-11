@@ -156,6 +156,39 @@ class HikrobotCamera:
                 
         print("[INFO] Defect triggered via GPIO")
         return True
+
+    def configure_io_output(self, line_name: str = "Line2", output_name: str = "UserOutput1") -> bool:
+        """Настраивает физическую линию (IO) камеры как программно управляемый выход."""
+        if not self._connected:
+            return False
+            
+        try:
+            self._cam.MV_CC_SetEnumValueByString("LineSelector", line_name)
+            self._cam.MV_CC_SetEnumValueByString("LineMode", "Strobe") 
+            self._cam.MV_CC_SetEnumValueByString("LineSource", output_name)
+            return True
+        except Exception as e:
+            print(f"[ERROR] Failed to configure IO output: {e}")
+            return False
+
+    def set_io_value(self, state: bool, output_name: str = "UserOutput1") -> bool:
+        """Устанавливает логическое состояние (Вкл/Выкл) на настроенном выходе."""
+        if not self._connected:
+            return False
+            
+        ret_sel = self._cam.MV_CC_SetEnumValueByString("UserOutputSelector", output_name)
+        if ret_sel != MV_OK:
+            print(f"[ERROR] Failed to select {output_name}: 0x{ret_sel:08X}")
+            return False
+            
+        ret_val = self._cam.MV_CC_SetBoolValue("UserOutputValue", state)
+        if ret_val != MV_OK:
+            print(f"[ERROR] Failed to set UserOutputValue to {state}: 0x{ret_val:08X}")
+            return False
+            
+        print(f"[INFO] Set {output_name} to {state}")
+        return True
+
     def get_frame(self, timeout_ms: int = 1000) -> np.ndarray | None:
         """Получить кадр как numpy array (BGR)."""
         if not self._grabbing:

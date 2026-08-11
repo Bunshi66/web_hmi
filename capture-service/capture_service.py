@@ -138,6 +138,7 @@ def main():
                     if camera._cam.set_exposure(exposure):
                         camera._exposure = exposure
                     else:
+                        
                         success = False
                 if gain is not None:
                     if camera._cam.set_gain(gain):

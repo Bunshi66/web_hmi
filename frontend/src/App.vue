@@ -27,6 +27,11 @@
       >Settings</button>
       <button 
         class="tab-btn" 
+        :class="{ active: activeTab === 'control' }" 
+        @click="activeTab = 'control'"
+      >Control</button>
+      <button 
+        class="tab-btn" 
         :class="{ active: activeTab === 'logs' }" 
         @click="loadLogs"
       >Logs</button>
@@ -76,6 +81,11 @@
       </div>
     </div>
 
+    <!-- CONTROL TAB -->
+    <div v-show="activeTab === 'control'" class="tab-content">
+      <ControlPanel :userRole="userRole" />
+    </div>
+
     <!-- LOGS TAB -->
     <div v-show="activeTab === 'logs'" class="tab-content">
       <div class="card" style="flex: 1; display: flex; flex-direction: column;">
@@ -112,6 +122,7 @@ import Controls from './components/Controls.vue'
 import TelemetryPanel from './components/TelemetryPanel.vue'
 import LoginModal from './components/LoginModal.vue'
 import Archive from './components/Archive.vue'
+import ControlPanel from './components/ControlPanel.vue'
 
 const activeTab = ref('stream')
 const showAuth = ref(false)

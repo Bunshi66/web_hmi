@@ -62,6 +62,36 @@ async def apply_settings(request: Request, body: SettingsRequest, camera: Camera
         
     return {"success": success}
 
+class IOConfigureRequest(BaseModel):
+    line_name: str
+    output_name: str
+
+@router.post("/io/configure")
+async def configure_io(request: Request, body: IOConfigureRequest, camera: CameraService = Depends(get_camera_service), db: AsyncSession = Depends(get_db)):
+    success = await camera.configure_io(line_name=body.line_name, output_name=body.output_name)
+    
+    client_ip = request.client.host
+    log = SystemLog(level="INFO", ip_address=client_ip, message=f"Configured IO {body.line_name} as {body.output_name}. Success: {success}")
+    db.add(log)
+    await db.commit()
+    
+    return {"success": success}
+
+class IOSetRequest(BaseModel):
+    state: bool
+    output_name: str
+
+@router.post("/io/set")
+async def set_io(request: Request, body: IOSetRequest, camera: CameraService = Depends(get_camera_service), db: AsyncSession = Depends(get_db)):
+    success = await camera.set_io(state=body.state, output_name=body.output_name)
+    
+    client_ip = request.client.host
+    log = SystemLog(level="INFO", ip_address=client_ip, message=f"Set IO {body.output_name} to {body.state}. Success: {success}")
+    db.add(log)
+    await db.commit()
+    
+    return {"success": success}
+
 @router.get("/stream")
 async def stream_camera(camera: CameraService = Depends(get_camera_service)):
     return StreamingResponse(
