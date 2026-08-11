@@ -35,11 +35,20 @@ class HikrobotCamera:
 
     def connect(self, ip: str = None) -> bool:
         """Найти камеру и подключиться."""
-        if self._connected:
+        if self._connected and self.is_alive():
             print("[INFO] Already connected.")
             return True
         try:
             ret = MvCamera.MV_CC_Initialize()
+
+    def is_alive(self) -> bool:
+        """Проверить физическое подключение камеры."""
+        if getattr(self, '_cam', None) and hasattr(self._cam, 'MV_CC_IsDeviceConnected'):
+            try:
+                return self._cam.MV_CC_IsDeviceConnected()
+            except Exception:
+                return False
+        return self._connected
             if ret != MV_OK:
                 print(f"[ERROR] Initialize failed: 0x{ret:08X}")
                 return False

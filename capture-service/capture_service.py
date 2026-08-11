@@ -48,6 +48,11 @@ class CameraCapture:
             return False
 
     def get_status(self) -> dict:
+        if self._connected:
+            if not self._cam.is_alive():
+                print("[WARNING] Physical connection lost. Disconnecting...")
+                self.disconnect()
+
         return {
             "connected": self._connected,
             "ip": self._ip if self._connected else None,
