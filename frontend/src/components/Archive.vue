@@ -11,6 +11,7 @@
           <option value="week">Last 7 Days</option>
         </select>
         <button class="btn secondary" @click="resetAndLoad" style="padding: 0.5rem 1rem; font-size: 0.875rem;">Refresh</button>
+        <button class="btn danger" @click="showClearConfirm = true" style="padding: 0.5rem 1rem; font-size: 0.875rem; background-color: #ef4444; border-color: #ef4444; color: white;">Clear All</button>
       </div>
     </div>
 
@@ -47,6 +48,7 @@
 
     <!-- Pagination -->
     <div v-if="totalPages > 1" style="display: flex; justify-content: center; gap: 1rem; margin-top: 1.5rem; align-items: center;">
+      <button class="btn secondary" :disabled="currentPage === 1" @click="changePage(1)">First</button>
       <button class="btn secondary" :disabled="currentPage === 1" @click="changePage(currentPage - 1)">Previous</button>
       <span style="color: var(--text-secondary);">Page {{ currentPage }} of {{ totalPages }}</span>
       <button class="btn secondary" :disabled="currentPage === totalPages" @click="changePage(currentPage + 1)">Next</button>
@@ -83,6 +85,18 @@
         </div>
       </div>
     </div>
+
+    <!-- Clear Confirmation Modal -->
+    <div v-if="showClearConfirm" class="modal-overlay" @click="showClearConfirm = false">
+      <div class="modal-content" @click.stop style="max-width: 400px; text-align: center; padding: 2rem;">
+        <h3 style="margin-top: 0; color: #ef4444;">Clear Archive?</h3>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Are you sure you want to completely clear the defects archive? This action cannot be undone and will delete all images.</p>
+        <div style="display: flex; justify-content: center; gap: 1rem;">
+          <button class="btn secondary" @click="showClearConfirm = false">Cancel</button>
+          <button class="btn" style="background-color: #ef4444; border-color: #ef4444; color: white;" @click="clearArchive">Confirm Clear</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -93,6 +107,7 @@ const defects = ref([])
 const totalDefects = ref(0)
 const loading = ref(true)
 const selectedDefect = ref(null)
+const showClearConfirm = ref(false)
 
 const currentPage = ref(1)
 const itemsPerPage = 10
@@ -106,12 +121,27 @@ const loadDefects = async () => {
     const offset = (currentPage.value - 1) * itemsPerPage
     const res = await fetch(`/camera/defects?limit=${itemsPerPage}&offset=${offset}&time_range=${timeRange.value}`)
     const data = await res.json()
-    defects.value = data.items
-    totalDefects.value = data.total
+    defects.value = data.items || []
+    totalDefects.value = data.total || 0
   } catch (e) {
     console.error("Failed to load defects", e)
   } finally {
     loading.value = false
+  }
+}
+
+const clearArchive = async () => {
+  try {
+    const res = await fetch('/camera/defects', { method: 'DELETE' })
+    if (res.ok) {
+      showClearConfirm.value = false
+      resetAndLoad()
+    } else {
+      alert('Failed to clear archive')
+    }
+  } catch (e) {
+    console.error(e)
+    alert('Error clearing archive')
   }
 }
 

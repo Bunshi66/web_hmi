@@ -163,3 +163,29 @@ async def get_defects(limit: int = 10, offset: int = 0, time_range: str = "all",
         ],
         "total": total
     }
+
+from sqlalchemy import delete
+import os
+
+@router.delete("/defects")
+async def clear_defects(db: AsyncSession = Depends(get_db)):
+    try:
+        # Delete all records from database
+        await db.execute(delete(Defect))
+        await db.commit()
+        
+        # Clear the images directory
+        defects_dir = "/app/data/defects"
+        if os.path.exists(defects_dir):
+            for filename in os.listdir(defects_dir):
+                file_path = os.path.join(defects_dir, filename)
+                try:
+                    if os.path.isfile(file_path):
+                        os.unlink(file_path)
+                except Exception as e:
+                    print(f"Error deleting file {file_path}: {e}")
+                    
+        return {"success": True, "message": "Archive cleared successfully"}
+    except Exception as e:
+        await db.rollback()
+        return {"success": False, "error": str(e)}
