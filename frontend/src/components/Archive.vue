@@ -64,11 +64,11 @@
         </div>
         <div class="modal-body">
           <div class="image-container">
-            <img :src="selectedDefect.image_url" alt="Defect" />
+            <img :src="selectedDefect.image_url" alt="Defect" @load="onImageLoad" />
             <svg 
-              v-if="selectedDefect.bbox_data" 
+              v-if="selectedDefect.bbox_data && imgWidth > 0" 
               class="telemetry-overlay"
-              viewBox="0 0 640 480"
+              :viewBox="`0 0 ${imgWidth} ${imgHeight}`"
               preserveAspectRatio="xMidYMid meet"
             >
               <!-- Bounding Boxes (Detection) -->
@@ -101,17 +101,17 @@
               <!-- Classification -->
               <g v-if="selectedDefect.bbox_data?.classification">
                 <rect 
-                  x="20" y="20" width="220" height="60" 
+                  x="20" y="20" width="400" height="120" 
                   rx="8" ry="8" 
                   :fill="selectedDefect.bbox_data.classification.color" 
                   fill-opacity="0.2" 
                   :stroke="selectedDefect.bbox_data.classification.color" 
-                  stroke-width="2" 
+                  stroke-width="4" 
                 />
-                <text x="35" y="45" font-family="monospace" font-size="20" font-weight="bold" :fill="selectedDefect.bbox_data.classification.color">
+                <text x="40" y="70" font-family="monospace" font-size="48" font-weight="bold" :fill="selectedDefect.bbox_data.classification.color" filter="drop-shadow(0px 0px 3px rgba(0,0,0,0.8))">
                   {{ selectedDefect.bbox_data.classification.label }}
                 </text>
-                <text x="35" y="65" font-family="monospace" font-size="14" fill="#ffffff">
+                <text x="40" y="110" font-family="monospace" font-size="32" fill="#ffffff" filter="drop-shadow(0px 0px 3px rgba(0,0,0,0.8))">
                   Conf: {{ (selectedDefect.bbox_data.classification.confidence * 100).toFixed(1) }}%
                 </text>
               </g>
@@ -119,6 +119,9 @@
           </div>
           <div style="margin-top: 1rem; color: var(--text-secondary);">
             Type: {{ selectedDefect.defect_type }} | Confidence: {{ (selectedDefect.confidence * 100).toFixed(1) }}%
+          </div>
+          <div style="margin-top: 0.5rem; color: var(--text-secondary); font-size: 0.8rem; background: #000; padding: 0.5rem; border-radius: 4px; overflow: auto; max-height: 100px;">
+            DEBUG bbox_data: {{ selectedDefect.bbox_data }}
           </div>
         </div>
       </div>
@@ -146,6 +149,14 @@ const totalDefects = ref(0)
 const loading = ref(true)
 const selectedDefect = ref(null)
 const showClearConfirm = ref(false)
+
+const imgWidth = ref(0)
+const imgHeight = ref(0)
+
+const onImageLoad = (e) => {
+  imgWidth.value = e.target.naturalWidth
+  imgHeight.value = e.target.naturalHeight
+}
 
 const currentPage = ref(1)
 const itemsPerPage = 10
@@ -200,6 +211,8 @@ const changePage = (page) => {
 }
 
 const viewDefect = (defect) => {
+  imgWidth.value = 0
+  imgHeight.value = 0
   selectedDefect.value = defect
 }
 

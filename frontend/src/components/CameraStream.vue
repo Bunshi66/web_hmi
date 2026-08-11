@@ -85,17 +85,17 @@
           <!-- Classification -->
           <g v-if="videoData.overlay_telemetry.ml?.model === 'classification' && videoData.overlay_telemetry.ml.data.classification">
             <rect 
-              x="20" y="20" width="220" height="60" 
+              x="20" y="20" width="400" height="120" 
               rx="8" ry="8" 
               :fill="videoData.overlay_telemetry.ml.data.classification.color" 
               fill-opacity="0.2" 
               :stroke="videoData.overlay_telemetry.ml.data.classification.color" 
-              stroke-width="2" 
+              stroke-width="4" 
             />
-            <text x="35" y="45" font-family="monospace" font-size="20" font-weight="bold" :fill="videoData.overlay_telemetry.ml.data.classification.color">
+            <text x="40" y="70" font-family="monospace" font-size="48" font-weight="bold" :fill="videoData.overlay_telemetry.ml.data.classification.color" filter="drop-shadow(0px 0px 3px rgba(0,0,0,0.8))">
               {{ videoData.overlay_telemetry.ml.data.classification.label }}
             </text>
-            <text x="35" y="65" font-family="monospace" font-size="14" fill="#ffffff">
+            <text x="40" y="110" font-family="monospace" font-size="32" fill="#ffffff" filter="drop-shadow(0px 0px 3px rgba(0,0,0,0.8))">
               Conf: {{ (videoData.overlay_telemetry.ml.data.classification.confidence * 100).toFixed(1) }}%
             </text>
           </g>
