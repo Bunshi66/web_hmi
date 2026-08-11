@@ -265,6 +265,7 @@ class AppSettingsUpdate(BaseModel):
     active_ml_model: str
     confidence_threshold: float = 0.5
     iou_threshold: float = 0.45
+    max_det: int = 100
 
 @router.get("/settings/app")
 async def get_app_settings(db: AsyncSession = Depends(get_db)):
@@ -278,7 +279,8 @@ async def get_app_settings(db: AsyncSession = Depends(get_db)):
     return {
         "active_ml_model": settings.active_ml_model,
         "confidence_threshold": settings.confidence_threshold,
-        "iou_threshold": settings.iou_threshold
+        "iou_threshold": settings.iou_threshold,
+        "max_det": settings.max_det
     }
 
 @router.post("/settings/app")
@@ -292,5 +294,13 @@ async def update_app_settings(data: AppSettingsUpdate, db: AsyncSession = Depend
     settings.active_ml_model = data.active_ml_model
     settings.confidence_threshold = data.confidence_threshold
     settings.iou_threshold = data.iou_threshold
+    settings.max_det = data.max_det
     await db.commit()
+    return {"success": True}
+
+from app.services.ml import trigger_manual_save
+
+@router.post("/manual-defect")
+async def trigger_manual_defect():
+    trigger_manual_save()
     return {"success": True}

@@ -71,13 +71,50 @@
               viewBox="0 0 640 480"
               preserveAspectRatio="xMidYMid meet"
             >
-              <rect 
-                :x="selectedDefect.bbox_data.x" 
-                :y="selectedDefect.bbox_data.y" 
-                :width="selectedDefect.bbox_data.w" 
-                :height="selectedDefect.bbox_data.h" 
-                class="bbox" 
-              />
+              <!-- Bounding Boxes (Detection) -->
+              <g v-if="selectedDefect.bbox_data?.bboxes">
+                <g v-for="(box, i) in selectedDefect.bbox_data.bboxes" :key="'bbox-'+i">
+                  <rect 
+                    :x="box.x" 
+                    :y="box.y" 
+                    :width="box.w" 
+                    :height="box.h" 
+                    class="bbox" 
+                  />
+                  <text :x="box.x" :y="box.y - 5" class="bbox-label">{{ box.label }}</text>
+                </g>
+              </g>
+
+              <!-- Polygons (Segmentation) -->
+              <g v-if="selectedDefect.bbox_data?.polygons">
+                <g v-for="(poly, i) in selectedDefect.bbox_data.polygons" :key="'poly-'+i">
+                  <polygon 
+                    :points="poly.points" 
+                    :fill="poly.color" 
+                    stroke="#3b82f6" 
+                    stroke-width="2" 
+                  />
+                  <text v-if="poly.label" :x="poly.points.split(' ')[0].split(',')[0]" :y="poly.points.split(' ')[0].split(',')[1] - 10" class="poly-label">{{ poly.label }}</text>
+                </g>
+              </g>
+
+              <!-- Classification -->
+              <g v-if="selectedDefect.bbox_data?.classification">
+                <rect 
+                  x="20" y="20" width="220" height="60" 
+                  rx="8" ry="8" 
+                  :fill="selectedDefect.bbox_data.classification.color" 
+                  fill-opacity="0.2" 
+                  :stroke="selectedDefect.bbox_data.classification.color" 
+                  stroke-width="2" 
+                />
+                <text x="35" y="45" font-family="monospace" font-size="20" font-weight="bold" :fill="selectedDefect.bbox_data.classification.color">
+                  {{ selectedDefect.bbox_data.classification.label }}
+                </text>
+                <text x="35" y="65" font-family="monospace" font-size="14" fill="#ffffff">
+                  Conf: {{ (selectedDefect.bbox_data.classification.confidence * 100).toFixed(1) }}%
+                </text>
+              </g>
             </svg>
           </div>
           <div style="margin-top: 1rem; color: var(--text-secondary);">
@@ -297,6 +334,22 @@ onMounted(() => {
   fill: none;
   stroke: #ef4444;
   stroke-width: 3;
+}
+
+.bbox-label {
+  fill: #ef4444;
+  font-size: 24px;
+  font-family: monospace;
+  font-weight: bold;
+  filter: drop-shadow(0px 0px 3px rgba(0,0,0,0.8));
+}
+
+.poly-label {
+  fill: #3b82f6;
+  font-size: 24px;
+  font-family: monospace;
+  font-weight: bold;
+  filter: drop-shadow(0px 0px 3px rgba(0,0,0,0.8));
 }
 
 .filter-select {

@@ -54,7 +54,12 @@
 
     <!-- STREAM TAB -->
     <div v-show="activeTab === 'stream'" class="tab-content">
-      <CameraStream :videoData="videoData" :fps="fps" />
+      <div style="flex: 2; display: flex; flex-direction: column; gap: 1rem;">
+        <CameraStream :videoData="latestFrame" :fps="currentFps" />
+        <div style="display: flex; justify-content: flex-end;">
+          <button class="btn danger" style="background-color: #ef4444; border-color: #ef4444; color: white;" @click="saveManualDefect">Save Frame to Archive</button>
+        </div>
+      </div>
 
       <div class="side-panel">
         <Controls @connect="handleConnect" @disconnect="handleDisconnect" />
@@ -144,6 +149,13 @@
               <span style="width: 40px; text-align: right;">{{ appSettingsForm.iou_threshold }}</span>
             </div>
           </div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: var(--text-primary);">Max Detections</span>
+            <div style="display: flex; gap: 1rem; align-items: center;">
+              <input type="range" v-model.number="appSettingsForm.max_det" min="1" max="300" step="1" :disabled="userRole === 'Operator'" style="width: 150px;">
+              <span style="width: 40px; text-align: right;">{{ appSettingsForm.max_det }}</span>
+            </div>
+          </div>
           
           <button class="btn" style="margin-top: 1rem;" :disabled="userRole === 'Operator'" @click="applyAppSettings">Save AI Settings</button>
         </div>
@@ -231,7 +243,8 @@ const connectionForm = ref({
 const appSettingsForm = ref({
   active_ml_model: 'detection',
   confidence_threshold: 0.5,
-  iou_threshold: 0.45
+  iou_threshold: 0.45,
+  max_det: 100
 })
 
 const showConnectionLost = ref(false)
@@ -275,12 +288,27 @@ const loadLogs = async () => {
     const res = await fetch('/camera/logs')
     const data = await res.json()
     systemLogs.value = data.logs
-  } catch (e) {
-    console.error('Failed to load logs', e)
+  } catch (error) {
+    console.error('Failed to trigger capture:', error)
+    alert('Failed to trigger capture')
   }
 }
 
-const downloadLogs = () => {
+const saveManualDefect = async () => {
+  try {
+    const response = await fetch('/api/camera/manual-defect', { method: 'POST' })
+    if (response.ok) {
+      alert('Save frame requested successfully!')
+    } else {
+      alert('Failed to save frame')
+    }
+  } catch (error) {
+    console.error('Error triggering manual save:', error)
+    alert('Error triggering manual save')
+  }
+}
+
+const downloadLogs = async () => {
   const content = systemLogs.value.join('\n')
   const blob = new Blob([content], { type: 'text/plain' })
   const url = URL.createObjectURL(blob)
@@ -341,8 +369,10 @@ const loadAppSettings = async () => {
   try {
     const res = await fetch('/camera/settings/app')
     const data = await res.json()
-    appSettingsForm.value = data
-  } catch (e) {
+    appSettingsForm.value.confidence_threshold = data.confidence_threshold || 0.5
+    appSettingsForm.value.iou_threshold = data.iou_threshold || 0.45
+    appSettingsForm.value.max_det = data.max_det || 100
+  } catch (error) {
     console.error("Failed to load app settings", e)
   }
 }

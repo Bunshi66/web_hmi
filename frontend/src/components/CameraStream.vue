@@ -227,16 +227,18 @@ img {
 
 .bbox-label {
   fill: #ef4444;
-  font-size: 16px;
+  font-size: 24px;
   font-family: monospace;
   font-weight: bold;
+  filter: drop-shadow(0px 0px 3px rgba(0,0,0,0.8));
 }
 
 .poly-label {
   fill: #3b82f6;
-  font-size: 16px;
+  font-size: 24px;
   font-family: monospace;
   font-weight: bold;
+  filter: drop-shadow(0px 0px 3px rgba(0,0,0,0.8));
 }
 
 .no-signal {

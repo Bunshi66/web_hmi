@@ -16,6 +16,12 @@ current_ml_telemetry = {
     "data": {"bboxes": []}
 }
 
+manual_defect_trigger = False
+
+def trigger_manual_save():
+    global manual_defect_trigger
+    manual_defect_trigger = True
+
 import cv2
 import numpy as np
 
@@ -56,10 +62,10 @@ class YoloWorker:
                 result = await session.execute(select(AppSettings).limit(1))
                 app_settings = result.scalars().first()
                 if app_settings:
-                    return app_settings.active_ml_model, app_settings.confidence_threshold, app_settings.iou_threshold
+                    return app_settings.active_ml_model, app_settings.confidence_threshold, app_settings.iou_threshold, app_settings.max_det
         except Exception as e:
             print(f"Error fetching active ML model: {e}")
-        return "detection", 0.5, 0.45
+        return "detection", 0.5, 0.45, 100
 
     def _load_model(self, model_type):
         from ultralytics import YOLO
@@ -74,7 +80,7 @@ class YoloWorker:
     async def _loop(self):
         print("[ML WORKER] Started real YOLO11 inference.")
         os.makedirs("/app/data/defects", exist_ok=True)
-        global current_ml_telemetry
+        global current_ml_telemetry, manual_defect_trigger
         
         frame_counter = 0
 
@@ -93,7 +99,7 @@ class YoloWorker:
                 if frame_counter % 3 != 0:
                     continue
                 
-                active_model, conf_thresh, iou_thresh = await self._get_app_settings()
+                active_model, conf_thresh, iou_thresh, max_det = await self._get_app_settings()
                 
                 # Check if model changed and needs reloading
                 if self.active_model_name != active_model or self.model is None:
@@ -116,7 +122,7 @@ class YoloWorker:
                 # Run inference
                 # To prevent blocking the async loop entirely, we should theoretically run this in an executor, 
                 # but Ultralytics might be fast enough on n-models, or we just accept the jitter.
-                results = await asyncio.to_thread(self.model, img, conf=conf_thresh, iou=iou_thresh, verbose=False)
+                results = await asyncio.to_thread(self.model, img, conf=conf_thresh, iou=iou_thresh, max_det=max_det, verbose=False)
                 result = results[0]
                 
                 inf_time = result.speed.get("inference", 0.0)
@@ -176,11 +182,10 @@ class YoloWorker:
                         if top1_conf < 0.5: # Example threshold for defect
                             is_critical_defect = True
                 
-                # Defect saving (throttled to avoid spam)
-                # For demo purposes, we will add a small random chance to trigger even if true conditions aren't met, 
-                # or just use the is_critical_defect flag.
-                if is_critical_defect and random.random() < 0.05:
-                    print(f"[ML WORKER] Critical condition detected! Saving to DB.")
+                # Defect saving (Manual Trigger)
+                if manual_defect_trigger:
+                    manual_defect_trigger = False
+                    print(f"[ML WORKER] Manual save triggered! Saving to DB.")
                     await self.camera.trigger_defect()
                     
                     timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
@@ -191,9 +196,9 @@ class YoloWorker:
                         
                     async with async_session() as session:
                         defect = Defect(
-                            defect_type="YOLO Detection",
-                            confidence=0.99,
-                            bbox_data={"model": active_model, "inf_time": inf_time},
+                            defect_type="Manual Save",
+                            confidence=1.0,
+                            bbox_data=current_ml_telemetry["data"],
                             image_path=filename
                         )
                         session.add(defect)

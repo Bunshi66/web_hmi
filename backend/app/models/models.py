@@ -44,3 +44,4 @@ class AppSettings(Base):
     active_ml_model = Column(String, default="detection") # 'detection', 'segmentation', 'classification'
     confidence_threshold = Column(Float, default=0.5)
     iou_threshold = Column(Float, default=0.45)
+    max_det = Column(Integer, default=100)
