@@ -195,10 +195,38 @@ class YoloWorker:
                     with open(filepath, "wb") as f:
                         f.write(jpeg_bytes)
                         
+                    # Extract actual class and confidence from telemetry
+                    def_type = "Manual Save"
+                    def_conf = 1.0
+                    data = current_ml_telemetry.get("data", {})
+                    
+                    if active_model == "detection" and data.get("bboxes"):
+                        label = data["bboxes"][0]["label"]
+                        parts = label.rsplit(" ", 1)
+                        if len(parts) == 2:
+                            def_type = parts[0]
+                            try:
+                                def_conf = float(parts[1].replace("%", "")) / 100.0
+                            except:
+                                pass
+                    elif active_model == "segmentation" and data.get("polygons"):
+                        label = data["polygons"][0].get("label", "")
+                        if label:
+                            parts = label.rsplit(" ", 1)
+                            if len(parts) == 2:
+                                def_type = parts[0]
+                                try:
+                                    def_conf = float(parts[1].replace("%", "")) / 100.0
+                                except:
+                                    pass
+                    elif active_model == "classification" and data.get("classification"):
+                        def_type = data["classification"]["label"]
+                        def_conf = data["classification"]["confidence"]
+
                     async with async_session() as session:
                         defect = Defect(
-                            defect_type="Manual Save",
-                            confidence=1.0,
+                            defect_type=def_type,
+                            confidence=def_conf,
                             bbox_data=current_ml_telemetry["data"],
                             image_path=filename
                         )

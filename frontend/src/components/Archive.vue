@@ -321,6 +321,17 @@ onMounted(() => {
   object-fit: contain;
 }
 
+.image-container {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+}
+
+.image-container img {
+  width: 100%;
+  display: block;
+}
+
 .telemetry-overlay {
   position: absolute;
   top: 0;
@@ -333,12 +344,12 @@ onMounted(() => {
 .bbox {
   fill: none;
   stroke: #ef4444;
-  stroke-width: 3;
+  stroke-width: 5;
 }
 
 .bbox-label {
   fill: #ef4444;
-  font-size: 24px;
+  font-size: 48px;
   font-family: monospace;
   font-weight: bold;
   filter: drop-shadow(0px 0px 3px rgba(0,0,0,0.8));
@@ -346,7 +357,7 @@ onMounted(() => {
 
 .poly-label {
   fill: #3b82f6;
-  font-size: 24px;
+  font-size: 48px;
   font-family: monospace;
   font-weight: bold;
   filter: drop-shadow(0px 0px 3px rgba(0,0,0,0.8));
