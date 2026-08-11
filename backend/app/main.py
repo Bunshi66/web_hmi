@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from app.api.camera import router as camera_router, get_camera_service
-from app.services.ml import MockMLWorker
+from app.services.ml import YoloWorker
 from app.services.retention import RetentionWorker
 from app.api.ws import router as ws_router
 from app.core.database import init_db
@@ -54,7 +54,7 @@ async def connection_watchdog():
 async def startup_event():
     global ml_worker, retention_worker, watchdog_task
     await init_db()
-    ml_worker = MockMLWorker(get_camera_service())
+    ml_worker = YoloWorker(get_camera_service())
     await ml_worker.start()
     
     retention_worker = RetentionWorker(retention_days=30, interval_hours=24)
