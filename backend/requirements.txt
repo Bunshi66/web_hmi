@@ -11,3 +11,4 @@ aiosqlite
 aiofiles
 websockets
 asyncpg
+ultralytics==8.3.4

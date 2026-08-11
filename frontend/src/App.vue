@@ -27,6 +27,11 @@
       >Settings</button>
       <button 
         class="tab-btn" 
+        :class="{ active: activeTab === 'ai' }" 
+        @click="activeTab = 'ai'"
+      >AI Models</button>
+      <button 
+        class="tab-btn" 
         :class="{ active: activeTab === 'control' }" 
         @click="activeTab = 'control'"
       >Control</button>
@@ -102,6 +107,45 @@
             <input type="number" v-model.number="connectionForm.reconnect_interval" :disabled="userRole === 'Operator'" style="background: rgba(0,0,0,0.2); border: 1px solid var(--surface-border); color: white; padding: 0.5rem; border-radius: 4px; width: 100px;">
           </div>
           <button class="btn" style="margin-top: 1rem;" :disabled="userRole === 'Operator'" @click="applyConnectionSettings">Save Connection Settings</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI MODELS TAB -->
+    <div v-show="activeTab === 'ai'" class="tab-content" style="display: flex; gap: 1rem; flex-wrap: wrap;">
+      <div class="card" style="flex: 1; min-width: 300px; max-width: 600px;">
+        <h3>YOLO11 Model Configuration</h3>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Select the active Neural Network model for telemetry overlay and configure inference parameters.</p>
+
+        <div v-if="userRole === 'Operator'" class="warning-alert">
+          <strong>Access Denied:</strong> Operators cannot modify AI models.
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 1rem; max-width: 500px; margin-top: 1rem;" :class="{ disabled: userRole === 'Operator' }">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: var(--text-primary);">Active Model</span>
+            <select v-model="appSettingsForm.active_ml_model" :disabled="userRole === 'Operator'" style="background: rgba(0,0,0,0.2); border: 1px solid var(--surface-border); color: white; padding: 0.5rem; border-radius: 4px; width: 150px;">
+              <option value="detection">Detection</option>
+              <option value="segmentation">Segmentation</option>
+              <option value="classification">Classification</option>
+            </select>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: var(--text-primary);">Confidence Threshold</span>
+            <div style="display: flex; gap: 1rem; align-items: center;">
+              <input type="range" v-model.number="appSettingsForm.confidence_threshold" min="0.1" max="0.99" step="0.01" :disabled="userRole === 'Operator'" style="width: 150px;">
+              <span style="width: 40px; text-align: right;">{{ appSettingsForm.confidence_threshold }}</span>
+            </div>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: var(--text-primary);">IOU Threshold</span>
+            <div style="display: flex; gap: 1rem; align-items: center;">
+              <input type="range" v-model.number="appSettingsForm.iou_threshold" min="0.1" max="0.99" step="0.01" :disabled="userRole === 'Operator'" style="width: 150px;">
+              <span style="width: 40px; text-align: right;">{{ appSettingsForm.iou_threshold }}</span>
+            </div>
+          </div>
+          
+          <button class="btn" style="margin-top: 1rem;" :disabled="userRole === 'Operator'" @click="applyAppSettings">Save AI Settings</button>
         </div>
       </div>
     </div>
@@ -182,6 +226,12 @@ const connectionForm = ref({
   target_ip: '192.168.1.64',
   auto_reconnect: true,
   reconnect_interval: 5
+})
+
+const appSettingsForm = ref({
+  active_ml_model: 'detection',
+  confidence_threshold: 0.5,
+  iou_threshold: 0.45
 })
 
 const showConnectionLost = ref(false)
@@ -287,6 +337,34 @@ const applyConnectionSettings = async () => {
   }
 }
 
+const loadAppSettings = async () => {
+  try {
+    const res = await fetch('/camera/settings/app')
+    const data = await res.json()
+    appSettingsForm.value = data
+  } catch (e) {
+    console.error("Failed to load app settings", e)
+  }
+}
+
+const applyAppSettings = async () => {
+  try {
+    const res = await fetch('/camera/settings/app', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(appSettingsForm.value)
+    })
+    const data = await res.json()
+    if (data.success) {
+      alert('AI Model settings applied successfully')
+    } else {
+      alert('Failed to apply AI settings')
+    }
+  } catch (e) {
+    console.error("Error applying app settings", e)
+  }
+}
+
 const connectWebSocket = () => {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${protocol}//${window.location.host}/camera/ws`
@@ -386,6 +464,7 @@ const handleDisconnect = async () => {
 onMounted(() => {
   connectWebSocket()
   loadConnectionSettings()
+  loadAppSettings()
 })
 
 onUnmounted(() => {

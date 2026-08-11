@@ -258,3 +258,39 @@ async def update_connection_settings(data: ConnectionSettingsUpdate, db: AsyncSe
     settings.reconnect_interval = data.reconnect_interval
     await db.commit()
     return {"success": True}
+
+from app.models.models import AppSettings
+
+class AppSettingsUpdate(BaseModel):
+    active_ml_model: str
+    confidence_threshold: float = 0.5
+    iou_threshold: float = 0.45
+
+@router.get("/settings/app")
+async def get_app_settings(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(AppSettings).limit(1))
+    settings = result.scalars().first()
+    if not settings:
+        settings = AppSettings()
+        db.add(settings)
+        await db.commit()
+        await db.refresh(settings)
+    return {
+        "active_ml_model": settings.active_ml_model,
+        "confidence_threshold": settings.confidence_threshold,
+        "iou_threshold": settings.iou_threshold
+    }
+
+@router.post("/settings/app")
+async def update_app_settings(data: AppSettingsUpdate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(AppSettings).limit(1))
+    settings = result.scalars().first()
+    if not settings:
+        settings = AppSettings()
+        db.add(settings)
+        
+    settings.active_ml_model = data.active_ml_model
+    settings.confidence_threshold = data.confidence_threshold
+    settings.iou_threshold = data.iou_threshold
+    await db.commit()
+    return {"success": True}

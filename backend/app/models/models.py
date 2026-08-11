@@ -36,3 +36,11 @@ class ConnectionSettings(Base):
     target_ip = Column(String, default="192.168.1.64")
     auto_reconnect = Column(Integer, default=1) # 1 for True, 0 for False (SQLite boolean compat)
     reconnect_interval = Column(Integer, default=5)
+
+class AppSettings(Base):
+    __tablename__ = "app_settings"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    active_ml_model = Column(String, default="detection") # 'detection', 'segmentation', 'classification'
+    confidence_threshold = Column(Float, default=0.5)
+    iou_threshold = Column(Float, default=0.45)

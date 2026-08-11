@@ -13,6 +13,9 @@
           </svg>
           Telemetry
         </button>
+        <div v-if="videoData && videoData.overlay_telemetry?.ml?.inference_time_ms !== undefined" class="fps-counter" style="color: var(--accent-color);">
+          ML: {{ videoData.overlay_telemetry.ml.inference_time_ms.toFixed(1) }} ms
+        </div>
         <div class="fps-counter">{{ fps }} FPS</div>
       </div>
     </div>
@@ -52,16 +55,49 @@
             />
           </g>
 
-          <!-- Bounding Boxes -->
-          <g v-for="(box, i) in videoData.overlay_telemetry.bboxes" :key="i">
+          <!-- Bounding Boxes (Detection) -->
+          <g v-if="videoData.overlay_telemetry.ml?.model === 'detection'">
+            <g v-for="(box, i) in videoData.overlay_telemetry.ml.data.bboxes" :key="'bbox-'+i">
+              <rect 
+                :x="box.x" 
+                :y="box.y" 
+                :width="box.w" 
+                :height="box.h" 
+                class="bbox" 
+              />
+              <text :x="box.x" :y="box.y - 5" class="bbox-label">{{ box.label }}</text>
+            </g>
+          </g>
+
+          <!-- Polygons (Segmentation) -->
+          <g v-if="videoData.overlay_telemetry.ml?.model === 'segmentation'">
+            <g v-for="(poly, i) in videoData.overlay_telemetry.ml.data.polygons" :key="'poly-'+i">
+              <polygon 
+                :points="poly.points" 
+                :fill="poly.color" 
+                stroke="#3b82f6" 
+                stroke-width="2" 
+              />
+              <text v-if="poly.label" :x="poly.points.split(' ')[0].split(',')[0]" :y="poly.points.split(' ')[0].split(',')[1] - 10" class="poly-label">{{ poly.label }}</text>
+            </g>
+          </g>
+
+          <!-- Classification -->
+          <g v-if="videoData.overlay_telemetry.ml?.model === 'classification' && videoData.overlay_telemetry.ml.data.classification">
             <rect 
-              :x="box.x" 
-              :y="box.y" 
-              :width="box.w" 
-              :height="box.h" 
-              class="bbox" 
+              x="20" y="20" width="220" height="60" 
+              rx="8" ry="8" 
+              :fill="videoData.overlay_telemetry.ml.data.classification.color" 
+              fill-opacity="0.2" 
+              :stroke="videoData.overlay_telemetry.ml.data.classification.color" 
+              stroke-width="2" 
             />
-            <text :x="box.x" :y="box.y - 5" class="bbox-label">{{ box.label }}</text>
+            <text x="35" y="45" font-family="monospace" font-size="20" font-weight="bold" :fill="videoData.overlay_telemetry.ml.data.classification.color">
+              {{ videoData.overlay_telemetry.ml.data.classification.label }}
+            </text>
+            <text x="35" y="65" font-family="monospace" font-size="14" fill="#ffffff">
+              Conf: {{ (videoData.overlay_telemetry.ml.data.classification.confidence * 100).toFixed(1) }}%
+            </text>
           </g>
         </svg>
       </div>
@@ -191,6 +227,13 @@ img {
 
 .bbox-label {
   fill: #ef4444;
+  font-size: 16px;
+  font-family: monospace;
+  font-weight: bold;
+}
+
+.poly-label {
+  fill: #3b82f6;
   font-size: 16px;
   font-family: monospace;
   font-weight: bold;

@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 from app.api.camera import get_camera_service
 from app.core.database import get_db
+from app.services.ml import current_ml_telemetry
 from app.models.models import Event
 from sqlalchemy.ext.asyncio import AsyncSession
 from contextlib import asynccontextmanager
@@ -58,12 +59,18 @@ async def websocket_endpoint(websocket: WebSocket):
                         continue
                         
                     img_bytes = frame_data.pop("image", b"")
+                    
+                    # Merge capture-service telemetry (e.g. crosshair) with ML telemetry
+                    base_overlay = frame_data.get("overlay_telemetry", {})
+                    # Inject the latest ML telemetry based on active model
+                    base_overlay["ml"] = current_ml_telemetry
+                    
                     payload = {
                         "action": "video",
                         "width": frame_data.get("width", 640),
                         "height": frame_data.get("height", 480),
                         "camera_temp": frame_data.get("camera_temp", 0.0),
-                        "overlay_telemetry": frame_data.get("overlay_telemetry", {}),
+                        "overlay_telemetry": base_overlay,
                         "service_telemetry": frame_data.get("service_telemetry", {}),
                         "timestamp": frame_data.get("timestamp", asyncio.get_event_loop().time())
                     }
