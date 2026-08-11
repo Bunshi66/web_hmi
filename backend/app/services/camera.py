@@ -140,6 +140,7 @@ class ZmqCamera(CameraService):
         self._context = zmq.asyncio.Context()
         self._cmd_socket = None
         self._stream_socket = None
+        self._lock = asyncio.Lock()
         self._connect_sockets()
 
     def _connect_sockets(self):
@@ -165,12 +166,17 @@ class ZmqCamera(CameraService):
 
     async def _send_command(self, command: str, **params) -> dict:
         request = {"command": command, **params}
-        try:
-            await self._cmd_socket.send_json(request)
-            return await self._cmd_socket.recv_json()
-        except zmq.Again:
-            self._reset_cmd_socket()
-            return {"success": False, "error": "timeout"}
+        async with self._lock:
+            try:
+                await self._cmd_socket.send_json(request)
+                return await self._cmd_socket.recv_json()
+            except zmq.Again:
+                self._reset_cmd_socket()
+                return {"success": False, "error": "timeout"}
+            except zmq.error.ZMQError as e:
+                print(f"[ZmqCamera] ZMQError: {e}")
+                self._reset_cmd_socket()
+                return {"success": False, "error": "zmq_error"}
 
     async def get_status(self) -> CameraStatus:
         try:
