@@ -189,3 +189,72 @@ async def clear_defects(db: AsyncSession = Depends(get_db)):
     except Exception as e:
         await db.rollback()
         return {"success": False, "error": str(e)}
+
+import zipfile
+from io import BytesIO
+from fastapi.responses import StreamingResponse
+from app.models.models import ConnectionSettings
+from pydantic import BaseModel
+from sqlalchemy import select
+
+@router.get("/defects/export")
+async def export_defects(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Defect))
+    defects = result.scalars().all()
+    
+    # Create an in-memory zip file
+    zip_buffer = BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        # Create CSV manifest
+        csv_lines = ["id,timestamp,defect_type,confidence,image_path"]
+        for d in defects:
+            csv_lines.append(f"{d.id},{d.timestamp.isoformat()},{d.defect_type},{d.confidence},{d.image_path}")
+            
+            # Add image to zip if it exists
+            img_path = f"/app/data/defects/{d.image_path}"
+            if os.path.exists(img_path):
+                zip_file.write(img_path, arcname=f"images/{d.image_path}")
+                
+        # Add manifest to zip
+        zip_file.writestr("manifest.csv", "\n".join(csv_lines))
+        
+    zip_buffer.seek(0)
+    return StreamingResponse(
+        zip_buffer, 
+        media_type="application/zip", 
+        headers={"Content-Disposition": "attachment; filename=defects_archive.zip"}
+    )
+
+class ConnectionSettingsUpdate(BaseModel):
+    target_ip: str
+    auto_reconnect: bool
+    reconnect_interval: int
+
+@router.get("/settings/connection")
+async def get_connection_settings(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(ConnectionSettings).limit(1))
+    settings = result.scalars().first()
+    if not settings:
+        settings = ConnectionSettings()
+        db.add(settings)
+        await db.commit()
+        await db.refresh(settings)
+    return {
+        "target_ip": settings.target_ip,
+        "auto_reconnect": bool(settings.auto_reconnect),
+        "reconnect_interval": settings.reconnect_interval
+    }
+
+@router.post("/settings/connection")
+async def update_connection_settings(data: ConnectionSettingsUpdate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(ConnectionSettings).limit(1))
+    settings = result.scalars().first()
+    if not settings:
+        settings = ConnectionSettings()
+        db.add(settings)
+        
+    settings.target_ip = data.target_ip
+    settings.auto_reconnect = 1 if data.auto_reconnect else 0
+    settings.reconnect_interval = data.reconnect_interval
+    await db.commit()
+    return {"success": True}

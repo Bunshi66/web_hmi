@@ -11,6 +11,7 @@
           <option value="week">Last 7 Days</option>
         </select>
         <button class="btn secondary" @click="resetAndLoad" style="padding: 0.5rem 1rem; font-size: 0.875rem;">Refresh</button>
+        <button class="btn secondary" @click="exportArchive" style="padding: 0.5rem 1rem; font-size: 0.875rem; color: #10b981; border-color: #10b981;">Export ZIP</button>
         <button class="btn danger" @click="showClearConfirm = true" style="padding: 0.5rem 1rem; font-size: 0.875rem; background-color: #ef4444; border-color: #ef4444; color: white;">Clear All</button>
       </div>
     </div>
@@ -143,6 +144,10 @@ const clearArchive = async () => {
     console.error(e)
     alert('Error clearing archive')
   }
+}
+
+const exportArchive = () => {
+  window.open('/camera/defects/export', '_blank')
 }
 
 const resetAndLoad = () => {

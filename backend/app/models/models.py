@@ -28,3 +28,11 @@ class SystemLog(Base):
     level = Column(String, default="INFO")
     ip_address = Column(String)
     message = Column(String)
+
+class ConnectionSettings(Base):
+    __tablename__ = "connection_settings"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    target_ip = Column(String, default="192.168.1.64")
+    auto_reconnect = Column(Integer, default=1) # 1 for True, 0 for False (SQLite boolean compat)
+    reconnect_interval = Column(Integer, default=5)
