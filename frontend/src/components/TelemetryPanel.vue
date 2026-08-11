@@ -22,7 +22,7 @@
       </div>
       <div class="telemetry-item">
         <div class="telemetry-label">Temperature</div>
-        <div class="telemetry-value">{{ status.temperature ? status.temperature.toFixed(1) + '°C' : '-' }}</div>
+        <div class="telemetry-value">{{ typeof status.temperature === 'number' ? status.temperature.toFixed(1) + '°C' : '-' }}</div>
       </div>
       <div class="telemetry-item">
         <div class="telemetry-label">Exposure</div>
