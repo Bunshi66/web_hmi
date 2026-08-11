@@ -39,7 +39,7 @@ async def connection_watchdog():
                 
                 if settings and settings.auto_reconnect:
                     status = await camera.get_status()
-                    if not status.get("connected", False):
+                    if not status.connected:
                         print(f"Watchdog: Camera disconnected, attempting to connect to {settings.target_ip}...")
                         await camera.connect(settings.target_ip)
                         
