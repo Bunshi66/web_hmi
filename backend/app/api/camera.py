@@ -114,8 +114,27 @@ async def add_log(request: Request, log_msg: LogMessage, db: AsyncSession = Depe
 async def get_logs(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(SystemLog).order_by(SystemLog.timestamp.desc()).limit(100))
     logs = result.scalars().all()
-    formatted_logs = [f"[{log.timestamp.strftime('%Y-%m-%d %H:%M:%S')}] {log.level} - [IP: {log.ip_address}] {log.message}" for log in logs]
+    formatted_logs = [
+        {
+            "timestamp": log.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+            "level": log.level,
+            "ip_address": log.ip_address,
+            "message": log.message
+        }
+        for log in logs
+    ]
     return {"logs": formatted_logs[::-1]}
+
+@router.delete("/logs/clear")
+async def clear_logs(db: AsyncSession = Depends(get_db)):
+    try:
+        from sqlalchemy import delete
+        await db.execute(delete(SystemLog))
+        await db.commit()
+        return {"success": True, "message": "Logs cleared successfully"}
+    except Exception as e:
+        await db.rollback()
+        return {"success": False, "error": str(e)}
 
 from app.models.models import Defect
 from sqlalchemy import desc

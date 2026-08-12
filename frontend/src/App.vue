@@ -168,21 +168,37 @@
     </div>
 
     <!-- LOGS TAB -->
-    <div v-show="activeTab === 'logs'" class="tab-content">
+    <div v-show="activeTab === 'logs'" class="tab-content" style="flex-direction: column; gap: 1rem;">
+      <!-- Telemetry Info -->
+      <div v-if="serviceTelemetryData" style="display: flex; gap: 1rem; flex-wrap: wrap;">
+        <div class="card telemetry-card">
+          <div class="telemetry-label">Live Processing Time</div>
+          <div class="telemetry-value">{{ serviceTelemetryData.processing_time_ms }}<span class="telemetry-unit">ms</span></div>
+        </div>
+        <div class="card telemetry-card">
+          <div class="telemetry-label">Capture Engine</div>
+          <div class="telemetry-value" style="font-size: 1.2rem;">{{ serviceTelemetryData.capture_engine }}</div>
+        </div>
+      </div>
+
       <div class="card" style="flex: 1; display: flex; flex-direction: column;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
           <h3 style="margin: 0;">System Logs</h3>
-          <button v-if="userRole !== 'Operator'" class="btn secondary" @click="downloadLogs" style="padding: 0.5rem 1rem; font-size: 0.875rem;">Download .txt</button>
+          <div style="display: flex; gap: 0.5rem;">
+            <button v-if="userRole !== 'Operator'" class="btn danger" @click="clearLogs" style="padding: 0.5rem 1rem; font-size: 0.875rem; background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.3);">Clear Logs</button>
+            <button v-if="userRole !== 'Operator'" class="btn secondary" @click="downloadLogs" style="padding: 0.5rem 1rem; font-size: 0.875rem;">Download .txt</button>
+          </div>
         </div>
         
-        <div style="flex: 1; background: #000; border-radius: 8px; padding: 1rem; font-family: monospace; color: var(--text-secondary); font-size: 0.85rem; overflow-y: auto; min-height: 400px;">
-          <div v-for="(log, i) in systemLogs" :key="i">{{ log }}</div>
-          <div v-if="serviceTelemetryData" style="color: var(--success); margin-top: 1rem;">
-            -- Live Service Telemetry --<br>
-            Processing Time: {{ serviceTelemetryData.processing_time_ms }} ms<br>
-            Engine: {{ serviceTelemetryData.capture_engine }}
+        <div style="flex: 1; background: #000; border-radius: 8px; padding: 1rem; font-family: 'Fira Code', monospace; color: var(--text-secondary); font-size: 0.85rem; overflow-y: auto; min-height: 400px; display: flex; flex-direction: column; gap: 0.25rem;">
+          <div v-for="(log, i) in systemLogs" :key="i" class="log-line">
+            <span class="log-time">[{{ log.timestamp }}]</span>
+            <span :class="['log-level', log.level ? log.level.toLowerCase() : '']">{{ log.level }}</span>
+            <span class="log-ip">[IP: {{ log.ip_address }}]</span>
+            <span class="log-msg">{{ log.message }}</span>
           </div>
-          <span style="color: var(--accent-color);">_</span>
+          <div v-if="systemLogs.length === 0" style="color: var(--text-secondary); font-style: italic; opacity: 0.7;">No logs available.</div>
+          <div><span style="color: var(--accent-color); animation: blink 1s step-end infinite;">_</span></div>
         </div>
       </div>
     </div>
@@ -308,8 +324,23 @@ const saveManualDefect = async () => {
   }
 }
 
+const clearLogs = async () => {
+  if (!confirm('Are you sure you want to clear all logs?')) return
+  try {
+    const res = await fetch('/camera/logs/clear', { method: 'DELETE' })
+    if (res.ok) {
+      systemLogs.value = []
+    } else {
+      alert('Failed to clear logs')
+    }
+  } catch (error) {
+    console.error('Error clearing logs:', error)
+    alert('Error clearing logs')
+  }
+}
+
 const downloadLogs = async () => {
-  const content = systemLogs.value.join('\n')
+  const content = systemLogs.value.map(log => `[${log.timestamp}] ${log.level} - [IP: ${log.ip_address}] ${log.message}`).join('\n')
   const blob = new Blob([content], { type: 'text/plain' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -736,4 +767,82 @@ header {
     gap: 1rem;
   }
 }
+
+.telemetry-card {
+  flex: 1;
+  min-width: 200px;
+  padding: 1.5rem;
+  background: rgba(16, 185, 129, 0.05);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.telemetry-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.telemetry-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--success);
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+
+.telemetry-unit {
+  font-size: 1rem;
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+.log-line {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.log-line:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.log-time {
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.log-level {
+  font-weight: 700;
+  min-width: 60px;
+  display: inline-block;
+}
+
+.log-level.info { color: #3b82f6; }
+.log-level.warning, .log-level.warn { color: #f59e0b; }
+.log-level.error { color: #ef4444; }
+.log-level.debug { color: #8b5cf6; }
+
+.log-ip {
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.log-msg {
+  color: #e2e8f0;
+  word-break: break-word;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
 </style>
