@@ -8,12 +8,12 @@ export default defineConfig({
   server: {
     proxy: {
       '/camera': {
-        target: 'http://backend:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
         ws: true
       },
       '/data': {
-        target: 'http://backend:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true
       }
     }
