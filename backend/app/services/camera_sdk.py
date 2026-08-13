@@ -93,6 +93,13 @@ class HikrobotCamera:
                                 self._cam.MV_CC_SetEnumValueByString("GainAuto", "Off")
                                 self._cam.MV_CC_SetFloatValue("Gain", 10.0)
                                 self._cam.MV_CC_SetIntValue("GevHeartbeatTimeout", 10000)
+                                
+                                # Network stability fixes for GigE
+                                nPacketSize = self._cam.MV_CC_GetOptimalPacketSize()
+                                if nPacketSize > 0:
+                                    self._cam.MV_CC_SetIntValue("GevSCPSPacketSize", nPacketSize)
+                                self._cam.MV_CC_SetIntValue("GevSCPD", 400) # Inter-packet delay to prevent NIC flooding
+                                
                                 self._connected = True
                                 logger.info("Connected to camera via GenTL")
                                 return True
@@ -130,6 +137,13 @@ class HikrobotCamera:
                 self._cam.MV_CC_SetEnumValueByString("GainAuto", "Off")
                 self._cam.MV_CC_SetFloatValue("Gain", 10.0)
                 self._cam.MV_CC_SetIntValue("GevHeartbeatTimeout", 10000)
+                
+                # Network stability fixes for GigE
+                nPacketSize = self._cam.MV_CC_GetOptimalPacketSize()
+                if nPacketSize > 0:
+                    self._cam.MV_CC_SetIntValue("GevSCPSPacketSize", nPacketSize)
+                self._cam.MV_CC_SetIntValue("GevSCPD", 400)
+                
                 self._connected = True
                 logger.info(f"Connected to camera (Standard) on device {i}")
                 return True
