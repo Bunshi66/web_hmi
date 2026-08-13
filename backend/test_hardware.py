@@ -24,14 +24,17 @@ def test_hardware():
         print("[SUCCESS] Camera is connected!")
         
         print("\n--- Testing frame grab ---")
-        try:
-            frame = sdk.get_frame()
+        if sdk.start_grabbing():
+            try:
+                frame = sdk.get_frame()
             if frame is not None:
                 print(f"[SUCCESS] Grabbed frame of shape: {frame.shape}")
             else:
                 print("[ERROR] get_frame() returned None")
         except Exception as e:
             print(f"[ERROR] Exception during get_frame: {e}")
+        finally:
+            sdk.stop_grabbing()
             
         print("\n--- Disconnecting ---")
         sdk.release()
