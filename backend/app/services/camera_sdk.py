@@ -7,18 +7,16 @@ import time
 from ctypes import c_ubyte, c_void_p, byref, cast, POINTER
 import numpy as np
 
-sys.path.append(os.path.join(os.path.dirname(__file__), 'MvImport'))
-
-from MvImport.MvCameraControl_class import MvCamera
-from MvImport.CameraParams_header import (
+from app.services.MvImport.MvCameraControl_class import MvCamera
+from app.services.MvImport.CameraParams_header import (
     MV_CC_DEVICE_INFO_LIST,
     MV_CC_DEVICE_INFO,
     MV_FRAME_OUT,
     MV_FRAME_OUT_INFO_EX,
     MVCC_FLOATVALUE,
 )
-from MvImport.MvErrorDefine_const import MV_OK
-from MvImport.PixelType_header import PixelType_Gvsp_BGR8_Packed
+from app.services.MvImport.MvErrorDefine_const import MV_OK
+from app.services.MvImport.PixelType_header import PixelType_Gvsp_BGR8_Packed
 
 # Константы интерфейсов
 MV_GIGE_DEVICE = 0x00000001
