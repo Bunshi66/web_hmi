@@ -147,6 +147,10 @@ class RealHikrobotCamera(CameraService):
         self._zmq_context = zmq.asyncio.Context()
         self._pub_socket = self._zmq_context.socket(zmq.PUB)
         self._pub_socket.bind("tcp://0.0.0.0:5556")
+        
+        self._latest_metadata = None
+        self._new_frame_event = asyncio.Event()
+        self._grab_task = None
 
     async def get_status(self) -> CameraStatus:
         if self._connected:
@@ -173,6 +177,10 @@ class RealHikrobotCamera(CameraService):
                 success = await asyncio.to_thread(self._cam.start_grabbing)
             self._connected = success
             self._ip = ip if success else None
+            
+            if success and (self._grab_task is None or self._grab_task.done()):
+                self._grab_task = asyncio.create_task(self._grab_loop())
+                
             return success
         except Exception as e:
             print(f"[ERROR] Failed to connect: {e}")
@@ -181,6 +189,10 @@ class RealHikrobotCamera(CameraService):
     async def disconnect(self) -> bool:
         try:
             if self._connected:
+                self._connected = False
+                if self._grab_task:
+                    self._grab_task.cancel()
+                    self._grab_task = None
                 await asyncio.to_thread(self._cam.stop_grabbing)
                 await asyncio.to_thread(self._cam.release)
                 self._cam = HikrobotCamera()
@@ -218,18 +230,23 @@ class RealHikrobotCamera(CameraService):
     async def set_io(self, state: bool, output_name: str) -> bool:
         return await asyncio.to_thread(self._cam.set_io_value, state, output_name)
 
-    async def stream_raw(self) -> AsyncGenerator[dict, None]:
-        while True:
-            if self._connected:
-                # Use to_thread to avoid blocking the asyncio event loop
+    async def _grab_loop(self):
+        while self._connected:
+            try:
                 frame = await asyncio.to_thread(self._cam.get_frame, 1000)
                 if frame is not None:
                     _, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                    
+                    # We fetch temp here or outside? It might be slow.
+                    # We can fetch temp every N frames to avoid blocking.
+                    # For now, fetch it.
+                    temp = await asyncio.to_thread(self._cam.get_temperature)
+                    
                     metadata = {
                         "width": frame.shape[1],
                         "height": frame.shape[0],
                         "timestamp": time.time(),
-                        "camera_temp": await asyncio.to_thread(self._cam.get_temperature),
+                        "camera_temp": temp,
                         "overlay_telemetry": {
                             "crosshair": {"x": frame.shape[1] // 2, "y": frame.shape[0] // 2},
                             "bboxes": []
@@ -241,6 +258,10 @@ class RealHikrobotCamera(CameraService):
                         "image": jpeg.tobytes()
                     }
                     
+                    self._latest_metadata = metadata
+                    self._new_frame_event.set()
+                    self._new_frame_event.clear()
+                    
                     # Publish to ML worker
                     try:
                         await self._pub_socket.send_json(
@@ -249,9 +270,21 @@ class RealHikrobotCamera(CameraService):
                         await self._pub_socket.send(metadata["image"])
                     except Exception as e:
                         print(f"ZMQ Pub Error: {e}")
-                        
-                    yield metadata
-            await asyncio.sleep(0.033)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"Grab loop error: {e}")
+            await asyncio.sleep(0.01)
+
+    async def stream_raw(self) -> AsyncGenerator[dict, None]:
+        while True:
+            if self._connected:
+                # Wait for the next frame from the grab loop
+                await self._new_frame_event.wait()
+                if self._latest_metadata:
+                    yield self._latest_metadata
+            else:
+                await asyncio.sleep(0.1)
 
     async def stream(self) -> AsyncGenerator[bytes, None]:
         async for data_dict in self.stream_raw():
