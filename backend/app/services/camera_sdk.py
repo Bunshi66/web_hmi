@@ -55,7 +55,7 @@ class HikrobotCamera:
                 return False
 
             # Try GenTL Enum
-            from CameraParams_header import MV_GENTL_IF_INFO_LIST, MV_GENTL_DEV_INFO_LIST, MV_GENTL_IF_INFO
+            from CameraParams_header import MV_GENTL_IF_INFO_LIST, MV_GENTL_DEV_INFO_LIST, MV_GENTL_IF_INFO, MV_GENTL_DEV_INFO
 
             gentl_if_list = MV_GENTL_IF_INFO_LIST()
             ret_gentl = MvCamera.MV_CC_EnumInterfacesByGenTL(gentl_if_list, "/opt/MVS/lib/64/MvProducerGEV.cti")
@@ -63,10 +63,26 @@ class HikrobotCamera:
 
             if gentl_if_list.nInterfaceNum > 0:
                 for i in range(gentl_if_list.nInterfaceNum):
-                    if_info = cast(gentl_if_list.pIFInfo[i], POINTER(MV_GENTL_IF_INFO)).contents
+                    if_info_ptr = cast(gentl_if_list.pIFInfo[i], POINTER(MV_GENTL_IF_INFO))
                     gentl_dev_list = MV_GENTL_DEV_INFO_LIST()
-                    ret_dev = MvCamera.MV_CC_EnumDevicesByGenTL(if_info, gentl_dev_list)
+                    ret_dev = MvCamera.MV_CC_EnumDevicesByGenTL(if_info_ptr, gentl_dev_list)
                     print(f"        GenTL EnumDevices IF[{i}]: 0x{ret_dev:08X}, num: {gentl_dev_list.nDeviceNum}")
+                    
+                    if ret_dev == MV_OK and gentl_dev_list.nDeviceNum > 0:
+                        st_device = cast(gentl_dev_list.pDeviceInfo[0], POINTER(MV_GENTL_DEV_INFO)).contents
+                        ret_create = self._cam.MV_CC_CreateHandleByGenTL(st_device)
+                        if ret_create == MV_OK:
+                            print("[INFO] Created handle via GenTL!")
+                            ret_open = self._cam.MV_CC_OpenDevice()
+                            if ret_open == MV_OK:
+                                self._cam.MV_CC_SetEnumValueByString("AcquisitionMode", "Continuous")
+                                self._connected = True
+                                print(f"[INFO] Connected to camera via GenTL")
+                                return True
+                            else:
+                                print(f"[ERROR] OpenDevice (GenTL) failed: 0x{ret_open:08X}")
+                        else:
+                            print(f"[ERROR] CreateHandleByGenTL failed: 0x{ret_create:08X}")
 
             device_list = MV_CC_DEVICE_INFO_LIST()
             ret = MvCamera.MV_CC_EnumDevices(MV_GIGE_DEVICE, device_list)
