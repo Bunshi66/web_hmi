@@ -34,7 +34,7 @@ def test_hardware():
             print(f"[ERROR] Exception during get_frame: {e}")
             
         print("\n--- Disconnecting ---")
-        sdk.disconnect()
+        sdk.release()
         print("[SUCCESS] Disconnected cleanly.")
     else:
         print("[FAILURE] Could not connect to the camera.")
