@@ -287,7 +287,6 @@ class HikrobotCamera:
 # ─── Тестовый запуск ───────────────────────────────────────
 
 if __name__ == "__main__":
-    import cv2
 
     cam = HikrobotCamera()
 
@@ -306,7 +305,6 @@ if __name__ == "__main__":
         frame = cam.get_frame(timeout_ms=1000)
         if frame is not None:
             print(f"  Frame {i + 1}: {frame.shape}, mean={frame.mean():.1f}")
-            cv2.imwrite(f"test_frame_{i:03d}.jpg", frame)
         else:
             print(f"  Frame {i + 1}: timeout")
         time.sleep(0.1)
