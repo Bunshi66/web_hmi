@@ -8,14 +8,14 @@ print("=== Standalone Hardware Diagnostics ===")
 print("This script bypasses FastAPI and tests the camera connection directly.")
 
 try:
-    from app.services.camera_sdk import CameraSDK
+    from app.services.camera_sdk import HikrobotCamera
 except ImportError as e:
-    print(f"[ERROR] Could not import CameraSDK: {e}")
+    print(f"[ERROR] Could not import HikrobotCamera: {e}")
     print("Make sure you are running this from the backend/ directory or have dependencies installed.")
     sys.exit(1)
 
 def test_hardware():
-    sdk = CameraSDK()
+    sdk = HikrobotCamera()
     
     print("\n--- Attempting to connect ---")
     connected = sdk.connect()
