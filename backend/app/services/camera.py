@@ -198,10 +198,6 @@ class RealHikrobotCamera(CameraService):
                 self._cam = HikrobotCamera()
                 self._connected = False
                 self._ip = None
-                try:
-                    self._pub_socket.close()
-                except:
-                    pass
             return True
         except Exception as e:
             print(f"[ERROR] Failed to disconnect: {e}")

@@ -88,8 +88,10 @@ class HikrobotCamera:
                             ret_open = self._cam.MV_CC_OpenDevice()
                             if ret_open == MV_OK:
                                 self._cam.MV_CC_SetEnumValueByString("AcquisitionMode", "Continuous")
-                                self._cam.MV_CC_SetEnumValueByString("ExposureAuto", "Continuous")
-                                self._cam.MV_CC_SetEnumValueByString("GainAuto", "Continuous")
+                                self._cam.MV_CC_SetEnumValueByString("ExposureAuto", "Off")
+                                self._cam.MV_CC_SetFloatValue("ExposureTime", 50000.0)
+                                self._cam.MV_CC_SetEnumValueByString("GainAuto", "Off")
+                                self._cam.MV_CC_SetFloatValue("Gain", 10.0)
                                 self._cam.MV_CC_SetIntValue("GevHeartbeatTimeout", 10000)
                                 self._connected = True
                                 logger.info("Connected to camera via GenTL")
@@ -123,8 +125,10 @@ class HikrobotCamera:
                     continue
 
                 self._cam.MV_CC_SetEnumValueByString("AcquisitionMode", "Continuous")
-                self._cam.MV_CC_SetEnumValueByString("ExposureAuto", "Continuous")
-                self._cam.MV_CC_SetEnumValueByString("GainAuto", "Continuous")
+                self._cam.MV_CC_SetEnumValueByString("ExposureAuto", "Off")
+                self._cam.MV_CC_SetFloatValue("ExposureTime", 50000.0)
+                self._cam.MV_CC_SetEnumValueByString("GainAuto", "Off")
+                self._cam.MV_CC_SetFloatValue("Gain", 10.0)
                 self._cam.MV_CC_SetIntValue("GevHeartbeatTimeout", 10000)
                 self._connected = True
                 logger.info(f"Connected to camera (Standard) on device {i}")
@@ -341,7 +345,6 @@ class HikrobotCamera:
         if self._connected:
             self._cam.MV_CC_CloseDevice()
             self._cam.MV_CC_DestroyHandle()
-            MvCamera.MV_CC_Finalize()
             self._connected = False
             logger.info("Device closed")
 
