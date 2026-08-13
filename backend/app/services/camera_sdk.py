@@ -4,8 +4,17 @@
 import sys
 import os
 import time
+import logging
 from ctypes import c_ubyte, c_void_p, byref, cast, POINTER
 import numpy as np
+
+logger = logging.getLogger("camera_sdk")
+logger.setLevel(logging.INFO)
+# We assume the parent app configures handlers, but if run standalone, we add one
+if not logger.handlers:
+    ch = logging.StreamHandler()
+    ch.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    logger.addHandler(ch)
 
 sys.path.append(os.path.join(os.path.dirname(__file__), 'MvImport'))
 
@@ -46,12 +55,12 @@ class HikrobotCamera:
     def connect(self, ip: str = None) -> bool:
         """Найти камеру и подключиться."""
         if self._connected and self.is_alive():
-            print("[INFO] Already connected.")
+            logger.info("Already connected.")
             return True
         try:
             ret = MvCamera.MV_CC_Initialize()
             if ret != MV_OK:
-                print(f"[ERROR] Initialize failed: 0x{ret:08X}")
+                logger.error(f"Initialize failed: 0x{ret:08X}")
                 return False
 
             # Try GenTL Enum
@@ -59,7 +68,7 @@ class HikrobotCamera:
 
             gentl_if_list = MV_GENTL_IF_INFO_LIST()
             ret_gentl = MvCamera.MV_CC_EnumInterfacesByGenTL(gentl_if_list, "/opt/MVS/lib/64/MvProducerGEV.cti")
-            print(f"[DEBUG] GenTL EnumInterfaces: 0x{ret_gentl:08X}, num: {gentl_if_list.nInterfaceNum}")
+            logger.debug(f"GenTL EnumInterfaces: 0x{ret_gentl:08X}, num: {gentl_if_list.nInterfaceNum}")
 
             if gentl_if_list.nInterfaceNum > 0:
                 for i in range(gentl_if_list.nInterfaceNum):
@@ -68,31 +77,31 @@ class HikrobotCamera:
                     if_id = bytes(if_info.chInterfaceID).decode('ascii', errors='ignore').rstrip('\x00')
                     gentl_dev_list = MV_GENTL_DEV_INFO_LIST()
                     ret_dev = MvCamera.MV_CC_EnumDevicesByGenTL(if_info_ptr, gentl_dev_list)
-                    print(f"        GenTL EnumDevices IF[{i}] ({if_id}): 0x{ret_dev:08X}, num: {gentl_dev_list.nDeviceNum}")
+                    logger.debug(f"GenTL EnumDevices IF[{i}] ({if_id}): 0x{ret_dev:08X}, num: {gentl_dev_list.nDeviceNum}")
                     
                     if ret_dev == MV_OK and gentl_dev_list.nDeviceNum > 0:
                         st_device = cast(gentl_dev_list.pDeviceInfo[0], POINTER(MV_GENTL_DEV_INFO)).contents
                         ret_create = self._cam.MV_CC_CreateHandleByGenTL(st_device)
                         if ret_create == MV_OK:
-                            print("[INFO] Created handle via GenTL!")
+                            logger.info("Created handle via GenTL!")
                             ret_open = self._cam.MV_CC_OpenDevice()
                             if ret_open == MV_OK:
                                 self._cam.MV_CC_SetEnumValueByString("AcquisitionMode", "Continuous")
                                 self._connected = True
-                                print(f"[INFO] Connected to camera via GenTL")
+                                logger.info("Connected to camera via GenTL")
                                 return True
                             else:
-                                print(f"[ERROR] OpenDevice (GenTL) failed: 0x{ret_open:08X}")
+                                logger.error(f"OpenDevice (GenTL) failed: 0x{ret_open:08X}")
                         else:
-                            print(f"[ERROR] CreateHandleByGenTL failed: 0x{ret_create:08X}")
+                            logger.error(f"CreateHandleByGenTL failed: 0x{ret_create:08X}")
 
             device_list = MV_CC_DEVICE_INFO_LIST()
             ret = MvCamera.MV_CC_EnumDevices(MV_GIGE_DEVICE, device_list)
             if ret != MV_OK or device_list.nDeviceNum == 0:
-                print(f"[ERROR] No cameras found (ret=0x{ret:08X}, nDeviceNum={device_list.nDeviceNum})")
+                logger.error(f"No cameras found (ret=0x{ret:08X}, nDeviceNum={device_list.nDeviceNum})")
                 return False
 
-            print(f"[INFO] Found {device_list.nDeviceNum} device(s)")
+            logger.info(f"Found {device_list.nDeviceNum} device(s) via standard Enum")
 
             st_device = cast(
                 device_list.pDeviceInfo[0], POINTER(MV_CC_DEVICE_INFO)
@@ -100,25 +109,22 @@ class HikrobotCamera:
 
             ret = self._cam.MV_CC_CreateHandle(st_device)
             if ret != MV_OK:
-                print(f"[ERROR] CreateHandle failed: 0x{ret:08X}")
+                logger.error(f"CreateHandle failed: 0x{ret:08X}")
                 return False
 
             ret = self._cam.MV_CC_OpenDevice()
             if ret != MV_OK:
-                print(f"[ERROR] OpenDevice failed: 0x{ret:08X}")
+                logger.error(f"OpenDevice failed: 0x{ret:08X}")
                 return False
 
-            # Устанавливаем режим съёмки
             self._cam.MV_CC_SetEnumValueByString("AcquisitionMode", "Continuous")
 
             self._connected = True
-            print(f"[INFO] Connected to camera")
+            logger.info("Connected to camera (Standard)")
             return True
 
         except Exception as e:
-            print(f"[ERROR] connect: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception(f"connect exception: {e}")
             return False
 
     def start_grabbing(self) -> bool:
@@ -127,10 +133,10 @@ class HikrobotCamera:
             return False
         ret = self._cam.MV_CC_StartGrabbing()
         if ret != MV_OK:
-            print(f"[ERROR] StartGrabbing failed: 0x{ret:08X}")
+            logger.error(f"StartGrabbing failed: 0x{ret:08X}")
             return False
         self._grabbing = True
-        print("[INFO] Grabbing started")
+        logger.info("Grabbing started")
         return True
 
     def stop_grabbing(self) -> bool:
@@ -139,7 +145,7 @@ class HikrobotCamera:
             return True
         ret = self._cam.MV_CC_StopGrabbing()
         self._grabbing = False
-        print("[INFO] Grabbing stopped")
+        logger.info("Grabbing stopped")
         return ret == MV_OK
 
     def set_exposure(self, exposure_time_us: float) -> bool:
@@ -150,7 +156,7 @@ class HikrobotCamera:
         self._cam.MV_CC_SetEnumValueByString("ExposureAuto", "Off")
         ret = self._cam.MV_CC_SetFloatValue("ExposureTime", float(exposure_time_us))
         if ret != MV_OK:
-            print(f"[ERROR] Failed to set ExposureTime: 0x{ret:08X}")
+            logger.error(f"Failed to set ExposureTime: 0x{ret:08X}")
             return False
         return True
 
@@ -162,7 +168,7 @@ class HikrobotCamera:
         self._cam.MV_CC_SetEnumValueByString("GainAuto", "Off")
         ret = self._cam.MV_CC_SetFloatValue("Gain", float(gain))
         if ret != MV_OK:
-            print(f"[ERROR] Failed to set Gain: 0x{ret:08X}")
+            logger.error(f"Failed to set Gain: 0x{ret:08X}")
             return False
         return True
 
@@ -177,14 +183,14 @@ class HikrobotCamera:
         stFloatValue = MVCC_FLOATVALUE()
         should_print = self._debug_temp_count < 2
         if should_print:
-            print("[DEBUG] Attempting to read temperature...")
+            logger.debug("Attempting to read temperature...")
 
         # Вариант 1: Стандартный DeviceTemperature (как Float)
         ret1 = self._cam.MV_CC_GetFloatValue("DeviceTemperature", stFloatValue)
         if ret1 == MV_OK:
             return stFloatValue.fCurValue
         elif should_print:
-            print(f"[DEBUG] Variant 1 (DeviceTemperature) failed. ret = 0x{ret1:08X}")
+            logger.debug(f"Variant 1 (DeviceTemperature) failed. ret = 0x{ret1:08X}")
 
         # Вариант 2: Возможно, нужно сначала выбрать сенсор через Selector
         ret_sel = self._cam.MV_CC_SetEnumValueByString("DeviceTemperatureSelector", "Sensor")
@@ -193,20 +199,20 @@ class HikrobotCamera:
             if ret2 == MV_OK:
                 return stFloatValue.fCurValue
             elif should_print:
-                print(f"[DEBUG] Variant 2 (Selector=Sensor -> DeviceTemperature) failed. ret = 0x{ret2:08X}")
+                logger.debug(f"Variant 2 (Selector=Sensor -> DeviceTemperature) failed. ret = 0x{ret2:08X}")
         elif should_print:
-            print(f"[DEBUG] Variant 2 (Set DeviceTemperatureSelector) failed. ret = 0x{ret_sel:08X}")
+            logger.debug(f"Variant 2 (Set DeviceTemperatureSelector) failed. ret = 0x{ret_sel:08X}")
 
         # Вариант 3: На старых моделях это узел "Temperature" (как Float)
         ret3 = self._cam.MV_CC_GetFloatValue("Temperature", stFloatValue)
         if ret3 == MV_OK:
             return stFloatValue.fCurValue
         elif should_print:
-            print(f"[DEBUG] Variant 3 (Temperature) failed. ret = 0x{ret3:08X}")
+            logger.debug(f"Variant 3 (Temperature) failed. ret = 0x{ret3:08X}")
 
         if should_print:
             self._debug_temp_count += 1
-            print("[DEBUG] All temperature variants failed. Returning 0.0")
+            logger.debug("All temperature variants failed. Returning 0.0")
 
         return 0.0
 
@@ -228,10 +234,10 @@ class HikrobotCamera:
             # Fallback for cameras that don't support LineTriggerSoftware
             ret2 = self._cam.MV_CC_SetCommandValue("TriggerSoftware")
             if ret2 != MV_OK:
-                print(f"[WARN] Trigger defect might not be supported. Error codes: 0x{ret:08X}, 0x{ret2:08X}")
+                logger.warning(f"Trigger defect might not be supported. Error codes: 0x{ret:08X}, 0x{ret2:08X}")
                 return False
                 
-        print("[INFO] Defect triggered via GPIO")
+        logger.info("Defect triggered via GPIO")
         return True
 
     def configure_io_output(self, line_name: str = "Line2", output_name: str = "UserOutput1") -> bool:
@@ -245,7 +251,7 @@ class HikrobotCamera:
             self._cam.MV_CC_SetEnumValueByString("LineSource", output_name)
             return True
         except Exception as e:
-            print(f"[ERROR] Failed to configure IO output: {e}")
+            logger.error(f"Failed to configure IO output: {e}")
             return False
 
     def set_io_value(self, state: bool, output_name: str = "UserOutput1") -> bool:
@@ -255,15 +261,15 @@ class HikrobotCamera:
             
         ret_sel = self._cam.MV_CC_SetEnumValueByString("UserOutputSelector", output_name)
         if ret_sel != MV_OK:
-            print(f"[ERROR] Failed to select {output_name}: 0x{ret_sel:08X}")
+            logger.error(f"Failed to select {output_name}: 0x{ret_sel:08X}")
             return False
             
         ret_val = self._cam.MV_CC_SetBoolValue("UserOutputValue", state)
         if ret_val != MV_OK:
-            print(f"[ERROR] Failed to set UserOutputValue to {state}: 0x{ret_val:08X}")
+            logger.error(f"Failed to set UserOutputValue to {state}: 0x{ret_val:08X}")
             return False
             
-        print(f"[INFO] Set {output_name} to {state}")
+        logger.info(f"Set {output_name} to {state}")
         return True
 
     def get_frame(self, timeout_ms: int = 1000):
@@ -295,7 +301,7 @@ class HikrobotCamera:
                 ).copy()
                 return img
             else:
-                print(f"[WARN] Unsupported pixel type: 0x{pixel_type:08X}")
+                logger.warning(f"Unsupported pixel type: 0x{pixel_type:08X}")
                 # Пробуем как моно
                 return img_np.reshape(
                     frame.stFrameInfo.nHeight,
@@ -314,7 +320,7 @@ class HikrobotCamera:
             self._cam.MV_CC_DestroyHandle()
             MvCamera.MV_CC_Finalize()
             self._connected = False
-            print("[INFO] Device closed")
+            logger.info("Device closed")
 
 
 # ─── Тестовый запуск ───────────────────────────────────────

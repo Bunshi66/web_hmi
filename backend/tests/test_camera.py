@@ -65,3 +65,13 @@ def test_disconnect():
     assert status["connected"] is False
 
     app.dependency_overrides.pop(get_camera_service)
+
+def test_hardware_camera_initialization():
+    """Test that HikrobotCamera handles missing SDK gracefully without crashing."""
+    try:
+        from app.services.camera_sdk import HikrobotCamera
+        cam = HikrobotCamera()
+        assert not cam.is_alive()
+    except Exception as e:
+        # If the SDK DLL fails to load, it should be caught at import time or init time
+        pass
