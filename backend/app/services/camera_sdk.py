@@ -294,6 +294,8 @@ class HikrobotCamera:
             img_np = np.frombuffer(img_data, dtype=np.uint8)
 
             if pixel_type == PixelType_Gvsp_BGR8_Packed:
+                expected_size = frame.stFrameInfo.nHeight * frame.stFrameInfo.nWidth * 3
+                img_np = img_np[:expected_size]
                 img = img_np.reshape(
                     frame.stFrameInfo.nHeight,
                     frame.stFrameInfo.nWidth,
@@ -303,6 +305,8 @@ class HikrobotCamera:
             else:
                 logger.warning(f"Unsupported pixel type: 0x{pixel_type:08X}")
                 # Пробуем как моно
+                expected_size = frame.stFrameInfo.nHeight * frame.stFrameInfo.nWidth
+                img_np = img_np[:expected_size]
                 return img_np.reshape(
                     frame.stFrameInfo.nHeight,
                     frame.stFrameInfo.nWidth
