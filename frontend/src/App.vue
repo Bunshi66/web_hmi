@@ -305,8 +305,8 @@ const loadLogs = async () => {
     const data = await res.json()
     systemLogs.value = data.logs
   } catch (error) {
-    console.error('Failed to trigger capture:', error)
-    alert('Failed to trigger capture')
+    console.error('Failed to load logs:', error)
+    alert('Failed to load logs')
   }
 }
 

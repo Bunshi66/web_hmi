@@ -146,7 +146,8 @@ class RealHikrobotCamera(CameraService):
 
     async def get_status(self) -> CameraStatus:
         if self._connected:
-            if not self._cam.is_alive():
+            is_alive = await asyncio.to_thread(self._cam.is_alive)
+            if not is_alive:
                 print("[WARNING] Physical connection lost. Disconnecting...")
                 await self.disconnect()
 
@@ -154,7 +155,7 @@ class RealHikrobotCamera(CameraService):
             connected=self._connected,
             ip=self._ip if self._connected else None,
             fps=self._fps if self._connected else 0.0,
-            temperature=self._cam.get_temperature() if self._connected else 0.0,
+            temperature=await asyncio.to_thread(self._cam.get_temperature) if self._connected else 0.0,
             exposure=self._exposure,
             gain=self._gain
         )
@@ -163,9 +164,9 @@ class RealHikrobotCamera(CameraService):
         if self._connected:
             return True
         try:
-            success = self._cam.connect(ip)
+            success = await asyncio.to_thread(self._cam.connect, ip)
             if success:
-                success = self._cam.start_grabbing()
+                success = await asyncio.to_thread(self._cam.start_grabbing)
             self._connected = success
             self._ip = ip if success else None
             return success
@@ -176,8 +177,8 @@ class RealHikrobotCamera(CameraService):
     async def disconnect(self) -> bool:
         try:
             if self._connected:
-                self._cam.stop_grabbing()
-                self._cam.release()
+                await asyncio.to_thread(self._cam.stop_grabbing)
+                await asyncio.to_thread(self._cam.release)
                 self._cam = HikrobotCamera()
                 self._connected = False
                 self._ip = None
@@ -189,25 +190,25 @@ class RealHikrobotCamera(CameraService):
     async def set_settings(self, exposure: Optional[float] = None, gain: Optional[float] = None) -> bool:
         success = True
         if exposure is not None:
-            if self._cam.set_exposure(exposure):
+            if await asyncio.to_thread(self._cam.set_exposure, exposure):
                 self._exposure = exposure
             else:
                 success = False
         if gain is not None:
-            if self._cam.set_gain(gain):
+            if await asyncio.to_thread(self._cam.set_gain, gain):
                 self._gain = gain
             else:
                 success = False
         return success
 
     async def trigger_defect(self) -> bool:
-        return self._cam.trigger_defect()
+        return await asyncio.to_thread(self._cam.trigger_defect)
 
     async def configure_io(self, line_name: str, output_name: str) -> bool:
-        return self._cam.configure_io_output(line_name, output_name)
+        return await asyncio.to_thread(self._cam.configure_io_output, line_name, output_name)
 
     async def set_io(self, state: bool, output_name: str) -> bool:
-        return self._cam.set_io_value(state, output_name)
+        return await asyncio.to_thread(self._cam.set_io_value, state, output_name)
 
     async def stream_raw(self) -> AsyncGenerator[dict, None]:
         while True:
@@ -220,7 +221,7 @@ class RealHikrobotCamera(CameraService):
                         "width": frame.shape[1],
                         "height": frame.shape[0],
                         "timestamp": time.time(),
-                        "camera_temp": self._cam.get_temperature(),
+                        "camera_temp": await asyncio.to_thread(self._cam.get_temperature),
                         "overlay_telemetry": {
                             "crosshair": {"x": frame.shape[1] // 2, "y": frame.shape[0] // 2},
                             "bboxes": []
