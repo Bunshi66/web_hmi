@@ -90,6 +90,7 @@ class HikrobotCamera:
                                 self._cam.MV_CC_SetEnumValueByString("AcquisitionMode", "Continuous")
                                 self._cam.MV_CC_SetEnumValueByString("ExposureAuto", "Continuous")
                                 self._cam.MV_CC_SetEnumValueByString("GainAuto", "Continuous")
+                                self._cam.MV_CC_SetIntValue("GevHeartbeatTimeout", 10000)
                                 self._connected = True
                                 logger.info("Connected to camera via GenTL")
                                 return True
@@ -124,6 +125,7 @@ class HikrobotCamera:
                 self._cam.MV_CC_SetEnumValueByString("AcquisitionMode", "Continuous")
                 self._cam.MV_CC_SetEnumValueByString("ExposureAuto", "Continuous")
                 self._cam.MV_CC_SetEnumValueByString("GainAuto", "Continuous")
+                self._cam.MV_CC_SetIntValue("GevHeartbeatTimeout", 10000)
                 self._connected = True
                 logger.info(f"Connected to camera (Standard) on device {i}")
                 return True
