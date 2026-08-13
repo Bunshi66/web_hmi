@@ -12,6 +12,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'MvImport'))
 from MvCameraControl_class import MvCamera
 from CameraParams_header import (
     MV_CC_DEVICE_INFO_LIST,
+    MV_INTERFACE_INFO_LIST,
     MV_CC_DEVICE_INFO,
     MV_FRAME_OUT,
     MV_FRAME_OUT_INFO_EX,
@@ -53,10 +54,20 @@ class HikrobotCamera:
                 print(f"[ERROR] Initialize failed: 0x{ret:08X}")
                 return False
 
+            # DEBUG: Enum interfaces
+            interface_list = MV_INTERFACE_INFO_LIST()
+            ret_if = MvCamera.MV_CC_EnumInterfaces(MV_GIGE_DEVICE, interface_list)
+            if ret_if == MV_OK:
+                print(f"[DEBUG] Found {interface_list.nInterfaceNum} network interface(s)")
+                for i in range(interface_list.nInterfaceNum):
+                    print(f"        Interface {i} found")
+            else:
+                print(f"[DEBUG] MV_CC_EnumInterfaces failed: 0x{ret_if:08X}")
+
             device_list = MV_CC_DEVICE_INFO_LIST()
             ret = MvCamera.MV_CC_EnumDevices(MV_GIGE_DEVICE, device_list)
             if ret != MV_OK or device_list.nDeviceNum == 0:
-                print(f"[ERROR] No cameras found")
+                print(f"[ERROR] No cameras found (ret=0x{ret:08X}, nDeviceNum={device_list.nDeviceNum})")
                 return False
 
             print(f"[INFO] Found {device_list.nDeviceNum} device(s)")
