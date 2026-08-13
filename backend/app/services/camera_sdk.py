@@ -92,6 +92,7 @@ class HikrobotCamera:
                                 return True
                             else:
                                 logger.error(f"OpenDevice (GenTL) failed: 0x{ret_open:08X}")
+                                self._cam.MV_CC_DestroyHandle()
                         else:
                             logger.error(f"CreateHandleByGenTL failed: 0x{ret_create:08X}")
 
@@ -103,25 +104,27 @@ class HikrobotCamera:
 
             logger.info(f"Found {device_list.nDeviceNum} device(s) via standard Enum")
 
-            st_device = cast(
-                device_list.pDeviceInfo[0], POINTER(MV_CC_DEVICE_INFO)
-            ).contents
+            for i in range(device_list.nDeviceNum):
+                st_device = cast(device_list.pDeviceInfo[i], POINTER(MV_CC_DEVICE_INFO)).contents
+                
+                ret = self._cam.MV_CC_CreateHandle(st_device)
+                if ret != MV_OK:
+                    logger.error(f"CreateHandle failed for device {i}: 0x{ret:08X}")
+                    continue
 
-            ret = self._cam.MV_CC_CreateHandle(st_device)
-            if ret != MV_OK:
-                logger.error(f"CreateHandle failed: 0x{ret:08X}")
-                return False
+                ret = self._cam.MV_CC_OpenDevice()
+                if ret != MV_OK:
+                    logger.error(f"OpenDevice failed for device {i}: 0x{ret:08X}")
+                    self._cam.MV_CC_DestroyHandle()
+                    continue
 
-            ret = self._cam.MV_CC_OpenDevice()
-            if ret != MV_OK:
-                logger.error(f"OpenDevice failed: 0x{ret:08X}")
-                return False
+                self._cam.MV_CC_SetEnumValueByString("AcquisitionMode", "Continuous")
+                self._connected = True
+                logger.info(f"Connected to camera (Standard) on device {i}")
+                return True
 
-            self._cam.MV_CC_SetEnumValueByString("AcquisitionMode", "Continuous")
-
-            self._connected = True
-            logger.info("Connected to camera (Standard)")
-            return True
+            logger.error("Failed to connect to any of the enumerated devices.")
+            return False
 
         except Exception as e:
             logger.exception(f"connect exception: {e}")
