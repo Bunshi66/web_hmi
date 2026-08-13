@@ -11,6 +11,10 @@ services:
       - LD_LIBRARY_PATH=/opt/MVS/lib/64
       - MVCAM_COMMON_RUNENV=/opt/MVS/lib
       - GENICAM_GENTL64_PATH=/opt/MVS/lib/64
+      - MVCAM_SDK_PATH=/opt/MVS
+      - MVCAM_SOFTWARE_LIBENV=/opt/MVS/lib
+      - MVCAM_GENICAM_CLPROTOCOL=/opt/MVS/lib/CLProtocol
+      - ALLUSERSPROFILE=/opt/MVS/MVFG
       - DATABASE_URL=postgresql+asyncpg://admin:admin@localhost:5432/webhmi
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
