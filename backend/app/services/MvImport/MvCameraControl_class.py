@@ -12,11 +12,15 @@ from CameraParams_header import *
 from MvErrorDefine_const import *
 
 # Python3.8版本修改Dll加载策略, 默认不再搜索Path环境变量, 同时增加winmode参数以兼容旧版本
-dllname = "MvCameraControl.dll"
-if "winmode" in ctypes.WinDLL.__init__.__code__.co_varnames:
-    MvCamCtrldll = WinDLL(dllname, winmode=0)
+if sys.platform.startswith('win'):
+    dllname = "MvCameraControl.dll"
+    if "winmode" in ctypes.WinDLL.__init__.__code__.co_varnames:
+        MvCamCtrldll = WinDLL(dllname, winmode=0)
+    else:
+        MvCamCtrldll = WinDLL(dllname)
 else:
-    MvCamCtrldll = WinDLL(dllname)
+    dllname = "libMvCameraControl.so"
+    MvCamCtrldll = CDLL(dllname)
 
 
 # 用于回调函数传入相机实例
