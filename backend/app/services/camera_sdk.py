@@ -54,15 +54,19 @@ class HikrobotCamera:
                 print(f"[ERROR] Initialize failed: 0x{ret:08X}")
                 return False
 
-            # DEBUG: Enum interfaces
-            interface_list = MV_INTERFACE_INFO_LIST()
-            ret_if = MvCamera.MV_CC_EnumInterfaces(MV_GIGE_DEVICE, interface_list)
-            if ret_if == MV_OK:
-                print(f"[DEBUG] Found {interface_list.nInterfaceNum} network interface(s)")
-                for i in range(interface_list.nInterfaceNum):
-                    print(f"        Interface {i} found")
-            else:
-                print(f"[DEBUG] MV_CC_EnumInterfaces failed: 0x{ret_if:08X}")
+            # Try GenTL Enum
+            from CameraParams_header import MV_GENTL_IF_INFO_LIST, MV_GENTL_DEV_INFO_LIST, MV_GENTL_IF_INFO
+
+            gentl_if_list = MV_GENTL_IF_INFO_LIST()
+            ret_gentl = MvCamera.MV_CC_EnumInterfacesByGenTL(gentl_if_list, "/opt/MVS/lib/64/MvProducerGEV.cti")
+            print(f"[DEBUG] GenTL EnumInterfaces: 0x{ret_gentl:08X}, num: {gentl_if_list.nInterfaceNum}")
+
+            if gentl_if_list.nInterfaceNum > 0:
+                for i in range(gentl_if_list.nInterfaceNum):
+                    if_info = cast(gentl_if_list.pIFInfo[i], POINTER(MV_GENTL_IF_INFO)).contents
+                    gentl_dev_list = MV_GENTL_DEV_INFO_LIST()
+                    ret_dev = MvCamera.MV_CC_EnumDevicesByGenTL(if_info, gentl_dev_list)
+                    print(f"        GenTL EnumDevices IF[{i}]: 0x{ret_dev:08X}, num: {gentl_dev_list.nDeviceNum}")
 
             device_list = MV_CC_DEVICE_INFO_LIST()
             ret = MvCamera.MV_CC_EnumDevices(MV_GIGE_DEVICE, device_list)
