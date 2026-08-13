@@ -131,144 +131,111 @@ class MockCamera(CameraService):
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + frame_data + b'\r\n')
 
-class ZmqCamera(CameraService):
-    """Общается с Capture Service через ZeroMQ REQ/REP асинхронно"""
+from app.services.camera_sdk import HikrobotCamera
 
-    def __init__(self, zmq_address: str = "tcp://localhost:5555"):
-        self._cmd_address = zmq_address  # порт 5555
-        self._stream_address = zmq_address.replace("5555", "5556")  # порт 5556
-        self._context = zmq.asyncio.Context()
-        self._cmd_socket = None
-        self._stream_socket = None
-        self._lock = asyncio.Lock()
-        self._connect_sockets()
+class RealHikrobotCamera(CameraService):
+    """Directly communicates with Hikrobot Camera via SDK in the backend"""
 
-    def _connect_sockets(self):
-        self._cmd_socket = self._context.socket(zmq.REQ)
-        self._cmd_socket.connect(self._cmd_address)
-        self._cmd_socket.setsockopt(zmq.RCVTIMEO, 1000)
-        self._cmd_socket.setsockopt(zmq.SNDTIMEO, 1000)
-
-        # SUB сокет для стриминга
-        self._stream_socket = self._context.socket(zmq.SUB)
-        self._stream_socket.connect(self._stream_address)
-        self._stream_socket.setsockopt_string(zmq.SUBSCRIBE, "")  # подписываемся на всё
-        self._stream_socket.setsockopt(zmq.RCVTIMEO, 1000)
-
-    def _reset_cmd_socket(self):
-        """Пересоздать командный сокет после ошибки."""
-        if self._cmd_socket:
-            self._cmd_socket.close()
-        self._cmd_socket = self._context.socket(zmq.REQ)
-        self._cmd_socket.connect(self._cmd_address)
-        self._cmd_socket.setsockopt(zmq.RCVTIMEO, 1000)
-        self._cmd_socket.setsockopt(zmq.SNDTIMEO, 1000)
-
-    async def _send_command(self, command: str, **params) -> dict:
-        request = {"command": command, **params}
-        async with self._lock:
-            try:
-                await self._cmd_socket.send_json(request)
-                return await self._cmd_socket.recv_json()
-            except zmq.Again:
-                self._reset_cmd_socket()
-                return {"success": False, "error": "timeout"}
-            except zmq.error.ZMQError as e:
-                print(f"[ZmqCamera] ZMQError: {e}")
-                self._reset_cmd_socket()
-                return {"success": False, "error": "zmq_error"}
+    def __init__(self):
+        self._cam = HikrobotCamera()
+        self._connected = False
+        self._ip = None
+        self._fps = 30.0
+        self._exposure = 5000
+        self._gain = 1.0
 
     async def get_status(self) -> CameraStatus:
-        try:
-            data = await self._send_command("status")
-            if not data.get("connected", False) and not data.get("success", True):
-                return CameraStatus(connected=False)
-            return CameraStatus(**data)
-        except zmq.Again:
-            return CameraStatus(connected=False)
+        if self._connected:
+            if not self._cam.is_alive():
+                print("[WARNING] Physical connection lost. Disconnecting...")
+                await self.disconnect()
+
+        return CameraStatus(
+            connected=self._connected,
+            ip=self._ip if self._connected else None,
+            fps=self._fps if self._connected else 0.0,
+            temperature=self._cam.get_temperature() if self._connected else 0.0,
+            exposure=self._exposure,
+            gain=self._gain
+        )
 
     async def connect(self, ip: str) -> bool:
+        if self._connected:
+            return True
         try:
-            response = await self._send_command("connect", ip=ip)
-            return response.get("success", False)
-        except zmq.Again:
+            success = self._cam.connect(ip)
+            if success:
+                success = self._cam.start_grabbing()
+            self._connected = success
+            self._ip = ip if success else None
+            return success
+        except Exception as e:
+            print(f"[ERROR] Failed to connect: {e}")
             return False
 
     async def disconnect(self) -> bool:
         try:
-            response = await self._send_command("disconnect")
-            return response.get("success", False)
-        except zmq.Again:
+            if self._connected:
+                self._cam.stop_grabbing()
+                self._cam.release()
+                self._cam = HikrobotCamera()
+                self._connected = False
+                self._ip = None
+            return True
+        except Exception as e:
+            print(f"[ERROR] Failed to disconnect: {e}")
             return False
 
     async def set_settings(self, exposure: Optional[float] = None, gain: Optional[float] = None) -> bool:
-        try:
-            params = {}
-            if exposure is not None: params["exposure"] = exposure
-            if gain is not None: params["gain"] = gain
-            response = await self._send_command("set_settings", **params)
-            return response.get("success", False)
-        except zmq.Again:
-            return False
+        success = True
+        if exposure is not None:
+            if self._cam.set_exposure(exposure):
+                self._exposure = exposure
+            else:
+                success = False
+        if gain is not None:
+            if self._cam.set_gain(gain):
+                self._gain = gain
+            else:
+                success = False
+        return success
 
     async def trigger_defect(self) -> bool:
-        try:
-            response = await self._send_command("trigger_defect")
-            return response.get("success", False)
-        except zmq.Again:
-            return False
+        return self._cam.trigger_defect()
 
     async def configure_io(self, line_name: str, output_name: str) -> bool:
-        try:
-            response = await self._send_command("configure_io", line_name=line_name, output_name=output_name)
-            return response.get("success", False)
-        except zmq.Again:
-            return False
+        return self._cam.configure_io_output(line_name, output_name)
 
     async def set_io(self, state: bool, output_name: str) -> bool:
-        try:
-            response = await self._send_command("set_io", state=state, output_name=output_name)
-            return response.get("success", False)
-        except zmq.Again:
-            return False
+        return self._cam.set_io_value(state, output_name)
 
     async def stream_raw(self) -> AsyncGenerator[dict, None]:
-        sub_socket = self._context.socket(zmq.SUB)
-        sub_socket.connect(self._stream_address)
-        sub_socket.setsockopt_string(zmq.SUBSCRIBE, "")
-        sub_socket.setsockopt(zmq.RCVTIMEO, 1000)
-        
-        try:
-            while True:
-                try:
-                    metadata = await sub_socket.recv_json()
-                    print(f"[ZmqCamera] Received frame metadata in stream_raw: {metadata.get('timestamp')}")
-                    if sub_socket.getsockopt(zmq.RCVMORE):
-                        jpeg_bytes = await sub_socket.recv()
-                        metadata["image"] = jpeg_bytes
-                        yield metadata
-                    else:
-                        if metadata.get("image") is not None:
-                            yield metadata
-                except zmq.Again:
-                    pass
-                await asyncio.sleep(0.01)
-        finally:
-            sub_socket.close()
+        while True:
+            if self._connected:
+                # Use to_thread to avoid blocking the asyncio event loop
+                frame = await asyncio.to_thread(self._cam.get_frame, 1000)
+                if frame is not None:
+                    _, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                    metadata = {
+                        "width": frame.shape[1],
+                        "height": frame.shape[0],
+                        "timestamp": time.time(),
+                        "camera_temp": self._cam.get_temperature(),
+                        "overlay_telemetry": {
+                            "crosshair": {"x": frame.shape[1] // 2, "y": frame.shape[0] // 2},
+                            "bboxes": []
+                        },
+                        "service_telemetry": {
+                            "processing_time_ms": 12.5,
+                            "capture_engine": "Hikrobot SDK Direct"
+                        },
+                        "image": jpeg.tobytes()
+                    }
+                    yield metadata
+            await asyncio.sleep(0.033)
 
     async def stream(self) -> AsyncGenerator[bytes, None]:
         async for data_dict in self.stream_raw():
             img_bytes = data_dict["image"]
-            if isinstance(img_bytes, str):
-                img_bytes = base64.b64decode(img_bytes)
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + img_bytes + b'\r\n')
-
-    def close(self):
-        """Закрыть все сокеты и контекст."""
-        if hasattr(self, '_cmd_socket') and self._cmd_socket:
-            self._cmd_socket.close()
-        if hasattr(self, '_stream_socket') and self._stream_socket:
-            self._stream_socket.close()
-        if hasattr(self, '_context') and self._context:
-            self._context.term()

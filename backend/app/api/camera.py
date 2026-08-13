@@ -4,7 +4,7 @@ from functools import lru_cache
 from pydantic import BaseModel
 import datetime
 
-from app.services.camera import CameraService, CameraStatus, MockCamera, ZmqCamera
+from app.services.camera import CameraService, CameraStatus, MockCamera, RealHikrobotCamera
 from app.core.config import settings
 from app.core.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,8 +16,8 @@ router = APIRouter(prefix="/camera", tags=["camera"])
 @lru_cache(maxsize=1)
 def get_camera_service() -> CameraService:
     """Фабрика: один экземпляр на всё приложение."""
-    if settings.camera_mode == "zmq":
-        return ZmqCamera(zmq_address=settings.zmq_camera_address)
+    if settings.camera_mode == "real":
+        return RealHikrobotCamera()
     return MockCamera(connected=True)
 
 @router.get("/status", response_model=CameraStatus)
@@ -189,20 +189,25 @@ import os
 @router.delete("/defects")
 async def clear_defects(db: AsyncSession = Depends(get_db)):
     try:
+        # Get all records first to know which files to delete
+        result = await db.execute(select(Defect))
+        defects = result.scalars().all()
+
         # Delete all records from database
         await db.execute(delete(Defect))
         await db.commit()
         
-        # Clear the images directory
+        # Clear the images directory safely
+        import logging
         defects_dir = "/app/data/defects"
-        if os.path.exists(defects_dir):
-            for filename in os.listdir(defects_dir):
-                file_path = os.path.join(defects_dir, filename)
+        for defect in defects:
+            if defect.image_path:
+                file_path = os.path.join(defects_dir, defect.image_path)
                 try:
-                    if os.path.isfile(file_path):
+                    if os.path.exists(file_path) and os.path.isfile(file_path):
                         os.unlink(file_path)
                 except Exception as e:
-                    print(f"Error deleting file {file_path}: {e}")
+                    logging.warning(f"Error deleting file {file_path}: {e}")
                     
         return {"success": True, "message": "Archive cleared successfully"}
     except Exception as e:

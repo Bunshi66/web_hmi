@@ -3,16 +3,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.backend
-    ports:
-      - "8024:8000"
+    network_mode: "host"
     volumes:
       - ./backend:/app
+      - /opt/MVS:/opt/MVS:ro
     environment:
-      # Для тестирования используем захват вебкамеры из Windows по ZMQ
-      - CAMERA_MODE=zmq
-      # host.docker.internal может не работать в чистом WSL без Docker Desktop
-      - ZMQ_CAMERA_ADDRESS=tcp://192.168.30.201:5555
-      - DATABASE_URL=postgresql+asyncpg://admin:admin@db:5432/webhmi
+      - LD_LIBRARY_PATH=/opt/MVS/lib/64
+      - DATABASE_URL=postgresql+asyncpg://admin:admin@localhost:5432/webhmi
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       - db

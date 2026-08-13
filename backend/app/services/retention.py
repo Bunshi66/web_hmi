@@ -39,15 +39,20 @@ class RetentionWorker:
                     )
                     old_defects = result.scalars().all()
                     
-                    for defect in old_defects:
-                        filepath = os.path.join("/app/data/defects", defect.image_path)
-                        if os.path.exists(filepath):
-                            os.remove(filepath)
-                    
                     # Delete from DB
                     await session.execute(delete(Defect).where(Defect.timestamp < cutoff_date))
                     await session.execute(delete(SystemLog).where(SystemLog.timestamp < cutoff_date))
                     await session.commit()
+                    
+                    import logging
+                    for defect in old_defects:
+                        if defect.image_path:
+                            filepath = os.path.join("/app/data/defects", defect.image_path)
+                            try:
+                                if os.path.exists(filepath) and os.path.isfile(filepath):
+                                    os.remove(filepath)
+                            except Exception as e:
+                                logging.warning(f"[RETENTION] Failed to delete file {filepath}: {e}")
                     
                     if old_defects:
                         print(f"[RETENTION] Deleted {len(old_defects)} old defects.")

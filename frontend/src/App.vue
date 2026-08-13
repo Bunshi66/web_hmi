@@ -251,7 +251,7 @@ const settingsForm = ref({
 })
 
 const connectionForm = ref({
-  target_ip: '192.168.1.64',
+  target_ip: import.meta.env.VITE_CAMERA_IP || '192.168.1.64',
   auto_reconnect: true,
   reconnect_interval: 5
 })
@@ -505,7 +505,7 @@ const handleConnect = async () => {
     const res = await fetch('/camera/connect', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ip: "192.168.30.170" })
+      body: JSON.stringify({ ip: connectionForm.value.target_ip })
     })
     console.log("Connect command sent:", await res.json())
   } catch (e) {
