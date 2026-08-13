@@ -233,7 +233,7 @@ class HikrobotCamera:
         print(f"[INFO] Set {output_name} to {state}")
         return True
 
-    def get_frame(self, timeout_ms: int = 1000) -> np.ndarray | None:
+    def get_frame(self, timeout_ms: int = 1000):
         """Получить кадр как numpy array (BGR)."""
         if not self._grabbing:
             return None
