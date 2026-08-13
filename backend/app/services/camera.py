@@ -143,6 +143,10 @@ class RealHikrobotCamera(CameraService):
         self._fps = 30.0
         self._exposure = 5000
         self._gain = 1.0
+        
+        self._zmq_context = zmq.asyncio.Context()
+        self._pub_socket = self._zmq_context.socket(zmq.PUB)
+        self._pub_socket.bind("tcp://0.0.0.0:5556")
 
     async def get_status(self) -> CameraStatus:
         if self._connected:
@@ -182,6 +186,10 @@ class RealHikrobotCamera(CameraService):
                 self._cam = HikrobotCamera()
                 self._connected = False
                 self._ip = None
+                try:
+                    self._pub_socket.close()
+                except:
+                    pass
             return True
         except Exception as e:
             print(f"[ERROR] Failed to disconnect: {e}")
@@ -232,6 +240,16 @@ class RealHikrobotCamera(CameraService):
                         },
                         "image": jpeg.tobytes()
                     }
+                    
+                    # Publish to ML worker
+                    try:
+                        await self._pub_socket.send_json(
+                            {"timestamp": metadata["timestamp"]}, flags=zmq.SNDMORE
+                        )
+                        await self._pub_socket.send(metadata["image"])
+                    except Exception as e:
+                        print(f"ZMQ Pub Error: {e}")
+                        
                     yield metadata
             await asyncio.sleep(0.033)
 

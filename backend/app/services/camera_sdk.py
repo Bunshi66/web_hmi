@@ -7,6 +7,7 @@ import time
 import logging
 from ctypes import c_ubyte, c_void_p, byref, cast, POINTER
 import numpy as np
+import cv2
 
 logger = logging.getLogger("camera_sdk")
 logger.setLevel(logging.INFO)
@@ -87,6 +88,8 @@ class HikrobotCamera:
                             ret_open = self._cam.MV_CC_OpenDevice()
                             if ret_open == MV_OK:
                                 self._cam.MV_CC_SetEnumValueByString("AcquisitionMode", "Continuous")
+                                self._cam.MV_CC_SetEnumValueByString("ExposureAuto", "Continuous")
+                                self._cam.MV_CC_SetEnumValueByString("GainAuto", "Continuous")
                                 self._connected = True
                                 logger.info("Connected to camera via GenTL")
                                 return True
@@ -119,6 +122,8 @@ class HikrobotCamera:
                     continue
 
                 self._cam.MV_CC_SetEnumValueByString("AcquisitionMode", "Continuous")
+                self._cam.MV_CC_SetEnumValueByString("ExposureAuto", "Continuous")
+                self._cam.MV_CC_SetEnumValueByString("GainAuto", "Continuous")
                 self._connected = True
                 logger.info(f"Connected to camera (Standard) on device {i}")
                 return True
@@ -305,6 +310,15 @@ class HikrobotCamera:
                     3
                 ).copy()
                 return img
+            elif pixel_type == 0x0108000A: # BayerRG8
+                expected_size = frame.stFrameInfo.nHeight * frame.stFrameInfo.nWidth
+                img_np = img_np[:expected_size]
+                raw_bayer = img_np.reshape(
+                    frame.stFrameInfo.nHeight,
+                    frame.stFrameInfo.nWidth
+                ).copy()
+                # Convert BayerRG to BGR for OpenCV
+                return cv2.cvtColor(raw_bayer, cv2.COLOR_BayerRG2BGR)
             else:
                 logger.warning(f"Unsupported pixel type: 0x{pixel_type:08X}")
                 # Пробуем как моно
