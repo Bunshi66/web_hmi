@@ -65,7 +65,7 @@ class HikrobotCamera:
                 for i in range(gentl_if_list.nInterfaceNum):
                     if_info_ptr = cast(gentl_if_list.pIFInfo[i], POINTER(MV_GENTL_IF_INFO))
                     if_info = cast(gentl_if_list.pIFInfo[i], POINTER(MV_GENTL_IF_INFO)).contents
-                    if_id = if_info.chInterfaceID.decode('ascii', errors='ignore')
+                    if_id = bytes(if_info.chInterfaceID).decode('ascii', errors='ignore').rstrip('\x00')
                     gentl_dev_list = MV_GENTL_DEV_INFO_LIST()
                     ret_dev = MvCamera.MV_CC_EnumDevicesByGenTL(if_info_ptr, gentl_dev_list)
                     print(f"        GenTL EnumDevices IF[{i}] ({if_id}): 0x{ret_dev:08X}, num: {gentl_dev_list.nDeviceNum}")
