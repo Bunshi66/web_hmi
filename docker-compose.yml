@@ -3,7 +3,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.backend
-    network_mode: "host"
+    # network_mode: "host" # Disabled for WSL LAN testing
+    ports:
+      - "8000:8000"
+      - "5556:5556"
     volumes:
       - ./backend:/app
       - /opt/MVS:/opt/MVS:ro
@@ -41,7 +44,9 @@ services:
     working_dir: /app
     volumes:
       - ./frontend:/app
-    network_mode: "host"
+    # network_mode: "host" # Disabled for WSL LAN testing
+    ports:
+      - "5173:5173"
     command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
 
 volumes:
