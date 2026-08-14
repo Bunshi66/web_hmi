@@ -132,6 +132,7 @@
             <select v-model="appSettingsForm.active_ml_model" :disabled="userRole === 'Operator'" style="background: rgba(0,0,0,0.2); border: 1px solid var(--surface-border); color: white; padding: 0.5rem; border-radius: 4px; width: 150px;">
               <option value="detection">Detection</option>
               <option value="segmentation">Segmentation</option>
+              <option value="electronic_segmentation">Electronic PCB Seg</option>
               <option value="classification">Classification</option>
             </select>
           </div>

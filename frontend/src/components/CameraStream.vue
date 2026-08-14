@@ -63,22 +63,23 @@
                 :y="box.y" 
                 :width="box.w" 
                 :height="box.h" 
-                class="bbox" 
+                class="bbox"
+                :stroke="box.color || '#ef4444'" 
               />
-              <text :x="box.x" :y="box.y - 5" class="bbox-label">{{ box.label }}</text>
+              <text :x="box.x" :y="box.y - 5" class="bbox-label" :fill="box.color || '#ef4444'">{{ box.label }}</text>
             </g>
           </g>
 
           <!-- Polygons (Segmentation) -->
-          <g v-if="videoData.overlay_telemetry.ml?.model === 'segmentation'">
+          <g v-if="videoData.overlay_telemetry.ml?.model === 'segmentation' || videoData.overlay_telemetry.ml?.model === 'electronic_segmentation'">
             <g v-for="(poly, i) in videoData.overlay_telemetry.ml.data.polygons" :key="'poly-'+i">
               <polygon 
                 :points="poly.points" 
-                :fill="poly.color" 
-                stroke="#3b82f6" 
+                :fill="poly.color || 'rgba(59, 130, 246, 0.5)'" 
+                :stroke="poly.stroke || '#3b82f6'" 
                 stroke-width="2" 
               />
-              <text v-if="poly.label" :x="poly.points.split(' ')[0].split(',')[0]" :y="poly.points.split(' ')[0].split(',')[1] - 10" class="poly-label">{{ poly.label }}</text>
+              <text v-if="poly.label" :x="poly.points.split(' ')[0].split(',')[0]" :y="poly.points.split(' ')[0].split(',')[1] - 10" class="poly-label" :fill="poly.stroke || '#3b82f6'">{{ poly.label }}</text>
             </g>
           </g>
 
@@ -221,12 +222,12 @@ img {
 
 .bbox {
   fill: none;
-  stroke: #ef4444;
+  /* Stroke is dynamically applied inline */
   stroke-width: 5;
 }
 
 .bbox-label {
-  fill: #ef4444;
+  /* Fill is dynamically applied inline */
   font-size: 48px;
   font-family: monospace;
   font-weight: bold;
@@ -234,7 +235,7 @@ img {
 }
 
 .poly-label {
-  fill: #3b82f6;
+  /* Fill is dynamically applied inline */
   font-size: 48px;
   font-family: monospace;
   font-weight: bold;

@@ -25,6 +25,17 @@ def trigger_manual_save():
 
 import cv2
 import numpy as np
+import colorsys
+
+def get_color_by_class(cls_id: int, alpha: float = 1.0) -> str:
+    """Generate a distinct RGBA color based on class ID using golden ratio hue progression."""
+    # Golden ratio conjugate ensures distinct hues
+    hue = (cls_id * 0.618033988749895) % 1.0
+    # Saturation and lightness fixed to ensure bright, visible colors
+    saturation = 0.85
+    lightness = 0.55
+    r, g, b = colorsys.hls_to_rgb(hue, lightness, saturation)
+    return f"rgba({int(r*255)}, {int(g*255)}, {int(b*255)}, {alpha})"
 
 class YoloWorker:
     def __init__(self, camera: CameraService):
@@ -74,6 +85,13 @@ class YoloWorker:
             return YOLO("yolo11n.pt")
         elif model_type == "segmentation":
             return YOLO("yolo11n-seg.pt")
+        elif model_type == "electronic_segmentation":
+            # Attempt to load custom electronic components model
+            model_path = "electronic_seg.pt"
+            if not os.path.exists(model_path):
+                print(f"[ML WORKER] Custom model {model_path} not found! Falling back to yolo11n-seg.pt")
+                model_path = "yolo11n-seg.pt"
+            return YOLO(model_path)
         elif model_type == "classification":
             return YOLO("yolo11n-cls.pt")
         return None
@@ -139,8 +157,10 @@ class YoloWorker:
                             conf = box.conf[0].item()
                             cls_id = int(box.cls[0].item())
                             label = f"{result.names[cls_id]} {conf*100:.0f}%"
+                            color = get_color_by_class(cls_id)
                             bboxes.append({
-                                "x": x1, "y": y1, "w": x2 - x1, "h": y2 - y1, "label": label
+                                "x": x1, "y": y1, "w": x2 - x1, "h": y2 - y1, 
+                                "label": label, "color": color
                             })
                             # Trigger condition: if any box has very high confidence
                             if conf > 0.90:
@@ -148,18 +168,21 @@ class YoloWorker:
                                 
                     current_ml_telemetry["data"] = {"bboxes": bboxes}
                     
-                elif active_model == "segmentation":
+                elif active_model in ("segmentation", "electronic_segmentation"):
                     polygons = []
                     if result.masks is not None and result.boxes is not None:
                         for mask, box in zip(result.masks.xy, result.boxes):
                             conf = box.conf[0].item()
                             cls_id = int(box.cls[0].item())
                             label = f"{result.names[cls_id]} {conf*100:.0f}%"
+                            color_fill = get_color_by_class(cls_id, alpha=0.5)
+                            color_stroke = get_color_by_class(cls_id, alpha=1.0)
                             # Convert array of [x, y] to string "x,y x,y"
                             points = " ".join([f"{p[0]},{p[1]}" for p in mask])
                             polygons.append({
                                 "points": points,
-                                "color": "rgba(59, 130, 246, 0.5)",
+                                "color": color_fill,
+                                "stroke": color_stroke,
                                 "label": label
                             })
                             if conf > 0.90:
@@ -209,7 +232,7 @@ class YoloWorker:
                                 def_conf = float(parts[1].replace("%", "")) / 100.0
                             except:
                                 pass
-                    elif active_model == "segmentation" and data.get("polygons"):
+                    elif active_model in ("segmentation", "electronic_segmentation") and data.get("polygons"):
                         label = data["polygons"][0].get("label", "")
                         if label:
                             parts = label.rsplit(" ", 1)
