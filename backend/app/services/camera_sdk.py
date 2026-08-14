@@ -94,11 +94,9 @@ class HikrobotCamera:
                                 self._cam.MV_CC_SetFloatValue("Gain", 10.0)
                                 self._cam.MV_CC_SetIntValue("GevHeartbeatTimeout", 10000)
                                 
-                                # Network stability fixes for GigE
-                                nPacketSize = self._cam.MV_CC_GetOptimalPacketSize()
-                                if nPacketSize > 0:
-                                    self._cam.MV_CC_SetIntValue("GevSCPSPacketSize", nPacketSize)
-                                self._cam.MV_CC_SetIntValue("GevSCPD", 400) # Inter-packet delay to prevent NIC flooding
+                                # Network stability fixes for GigE (Force 1500 MTU for Docker compatibility)
+                                self._cam.MV_CC_SetIntValue("GevSCPSPacketSize", 1500)
+                                self._cam.MV_CC_SetIntValue("GevSCPD", 1000) # Inter-packet delay to prevent NIC flooding
                                 
                                 self._connected = True
                                 logger.info("Connected to camera via GenTL")
@@ -138,11 +136,9 @@ class HikrobotCamera:
                 self._cam.MV_CC_SetFloatValue("Gain", 10.0)
                 self._cam.MV_CC_SetIntValue("GevHeartbeatTimeout", 10000)
                 
-                # Network stability fixes for GigE
-                nPacketSize = self._cam.MV_CC_GetOptimalPacketSize()
-                if nPacketSize > 0:
-                    self._cam.MV_CC_SetIntValue("GevSCPSPacketSize", nPacketSize)
-                self._cam.MV_CC_SetIntValue("GevSCPD", 400)
+                # Network stability fixes for GigE (Force 1500 MTU for Docker compatibility)
+                self._cam.MV_CC_SetIntValue("GevSCPSPacketSize", 1500)
+                self._cam.MV_CC_SetIntValue("GevSCPD", 1000)
                 
                 self._connected = True
                 logger.info(f"Connected to camera (Standard) on device {i}")
@@ -337,8 +333,9 @@ class HikrobotCamera:
                     frame.stFrameInfo.nHeight,
                     frame.stFrameInfo.nWidth
                 ).copy()
-                # Convert BayerRG to BGR for OpenCV
-                return cv2.cvtColor(raw_bayer, cv2.COLOR_BayerRG2BGR)
+                # Bypass color conversion to isolate the black screen issue.
+                # Just return the raw bayer grid as a grayscale image.
+                return raw_bayer
             else:
                 logger.warning(f"Unsupported pixel type: 0x{pixel_type:08X}")
                 # Пробуем как моно
